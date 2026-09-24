@@ -1,0 +1,10 @@
+{
+  "name": "@telltale/detectors",
+  "version": "0.0.0",
+  "description": "Market-risk metrics and manipulation detectors for Hyperliquid markets, as pure functions with no dependencies.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

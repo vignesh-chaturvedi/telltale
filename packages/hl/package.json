@@ -1,0 +1,10 @@
+{
+  "name": "@telltale/hl",
+  "version": "0.0.0",
+  "description": "Read-only clients for the Hyperliquid API, Hydromancer and Pyth, with the types Telltale uses.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

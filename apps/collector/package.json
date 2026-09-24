@@ -1,0 +1,15 @@
+{
+  "name": "@telltale/collector",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Streams Hyperliquid market data, grades every market, sends alerts and serves the JSON API.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.ts"
+  },
+  "dependencies": {
+    "@telltale/detectors": "workspace:*",
+    "@telltale/hl": "workspace:*"
+  }
+}

@@ -1,0 +1,25 @@
+# Dependencies and build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Local data: SQLite, Parquet downloads, replay output
+data/
+*.db
+*.db-*
+*.sqlite
+*.parquet
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Private planning notes
+BUILD-PLAN.html
+private/
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
