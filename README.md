@@ -16,9 +16,24 @@ Status: in development for the Hyperliquid track of Colosseum's Crypto World's F
 
 Node 24 or later (it runs TypeScript directly) and pnpm.
 
+## Running the collector
+
 ```bash
 pnpm install
+pnpm collect            # streams mainnet into data/telltale.db; Ctrl-C stops it cleanly
+pnpm collect:status     # coverage per minute, WebSocket gaps and storage growth
+```
+
+`pnpm collect --testnet` uses testnet, `--db <path>` picks another database file, and `--minutes <n>` stops after a fixed time.
+
+The collector uses only the public Hyperliquid API and stays inside its per-IP limits. It sends about 750 WebSocket subscriptions over 4 connections and uses about 300 REST weight a minute. Every live market gets one row per minute with oracle, mark, open interest, funding, order-book depth within 1%, 2% and 5% of mid, and trade flow. HIP-3 markets also get oracle update timing.
+
+## Development
+
+```bash
 pnpm typecheck
+pnpm test               # unit tests against recorded API responses
+pnpm fixtures:record    # re-record those responses from mainnet
 ```
 
 ## License

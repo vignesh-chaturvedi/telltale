@@ -15,5 +15,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["packages/*/src", "packages/*/test", "apps/collector/src", "apps/collector/test"]
+  "include": ["packages/*/src", "packages/*/test", "apps/collector/src", "apps/collector/scripts", "apps/collector/test"]
 }

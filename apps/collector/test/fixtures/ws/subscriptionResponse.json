@@ -1,0 +1,12 @@
+[
+ {
+  "channel": "subscriptionResponse",
+  "data": {
+   "method": "subscribe",
+   "subscription": {
+    "type": "activeAssetCtx",
+    "coin": "xyz:SP500"
+   }
+  }
+ }
+]

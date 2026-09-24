@@ -1,0 +1,333 @@
+[
+ null,
+ {
+  "name": "xyz",
+  "fullName": "XYZ",
+  "deployer": "0x88806a71d74ad0a510b350545c9ae490912f0888",
+  "oracleUpdater": null,
+  "feeRecipient": "0x83ffcfb1f2ad843c474b2e28df86c721cb869d3a",
+  "assetToStreamingOiCap": [
+   [
+    "xyz:GOLD",
+    "750000000.0"
+   ],
+   [
+    "xyz:HOOD",
+    "150000000.0"
+   ],
+   [
+    "xyz:NVDA",
+    "500000000.0"
+   ],
+   [
+    "xyz:SP500",
+    "1250000000.0"
+   ],
+   [
+    "xyz:TSLA",
+    "100000000.0"
+   ],
+   [
+    "xyz:XYZ100",
+    "1000000000.0"
+   ]
+  ],
+  "subDeployers": [
+   [
+    "registerAsset",
+    [
+     "0x7d16f116d252db609c56d27d6c9605eb03e16657",
+     "0x8c4190018486a2dbac2629d688136e8990170ff2",
+     "0xc0892b4f864807ec26dde6ad8dad6914e079059d"
+    ]
+   ],
+   [
+    "setOracle",
+    [
+     "0x1234567890545d1df9ee64b35fdd16966e08acec"
+    ]
+   ],
+   [
+    "setFeeRecipient",
+    [
+     "0x7d16f116d252db609c56d27d6c9605eb03e16657",
+     "0xc0892b4f864807ec26dde6ad8dad6914e079059d"
+    ]
+   ],
+   [
+    "haltTrading",
+    [
+     "0x7d16f116d252db609c56d27d6c9605eb03e16657",
+     "0xc0892b4f864807ec26dde6ad8dad6914e079059d"
+    ]
+   ],
+   [
+    "setMarginTableIds",
+    [
+     "0x7d16f116d252db609c56d27d6c9605eb03e16657",
+     "0x8c4190018486a2dbac2629d688136e8990170ff2",
+     "0xc0892b4f864807ec26dde6ad8dad6914e079059d"
+    ]
+   ],
+   [
+    "setOpenInterestCaps",
+    [
+     "0x7d16f116d252db609c56d27d6c9605eb03e16657",
+     "0x8c4190018486a2dbac2629d688136e8990170ff2",
+     "0xc0892b4f864807ec26dde6ad8dad6914e079059d"
+    ]
+   ],
+   [
+    "setFundingMultipliers",
+    [
+     "0x7d16f116d252db609c56d27d6c9605eb03e16657",
+     "0x8c4190018486a2dbac2629d688136e8990170ff2",
+     "0xc0892b4f864807ec26dde6ad8dad6914e079059d"
+    ]
+   ],
+   [
+    "setMarginModes",
+    [
+     "0x7d16f116d252db609c56d27d6c9605eb03e16657",
+     "0x8c4190018486a2dbac2629d688136e8990170ff2",
+     "0xc0892b4f864807ec26dde6ad8dad6914e079059d"
+    ]
+   ],
+   [
+    "setDeployerFees",
+    [
+     "0x7d16f116d252db609c56d27d6c9605eb03e16657",
+     "0x8c4190018486a2dbac2629d688136e8990170ff2"
+    ]
+   ],
+   [
+    "setFundingInterestRates",
+    [
+     "0x7d16f116d252db609c56d27d6c9605eb03e16657",
+     "0x8c4190018486a2dbac2629d688136e8990170ff2",
+     "0xc0892b4f864807ec26dde6ad8dad6914e079059d"
+    ]
+   ],
+   [
+    "setPerpAnnotation",
+    [
+     "0x7d16f116d252db609c56d27d6c9605eb03e16657",
+     "0x8c4190018486a2dbac2629d688136e8990170ff2",
+     "0xc0892b4f864807ec26dde6ad8dad6914e079059d"
+    ]
+   ]
+  ],
+  "assetToFundingMultiplier": [
+   [
+    "xyz:GOLD",
+    "0.5"
+   ],
+   [
+    "xyz:HOOD",
+    "0.5"
+   ],
+   [
+    "xyz:NVDA",
+    "0.5"
+   ],
+   [
+    "xyz:SP500",
+    "0.5"
+   ],
+   [
+    "xyz:TSLA",
+    "0.5"
+   ],
+   [
+    "xyz:XYZ100",
+    "0.5"
+   ]
+  ],
+  "assetToFundingInterestRate": [],
+  "assetToFundingClamp": []
+ },
+ {
+  "name": "flx",
+  "fullName": "Felix Exchange",
+  "deployer": "0x2fab552502a6d45920d5741a2f3ebf4c35536352",
+  "oracleUpdater": "0x94757f8dcb4bf73b850195660e959d1105cfedd5",
+  "feeRecipient": "0xe2872b5ae7dcbba40cc4510d08c8bbea95b42d43",
+  "assetToStreamingOiCap": [
+   [
+    "flx:COIN",
+    "8000000.0"
+   ],
+   [
+    "flx:CRCL",
+    "5000000.0"
+   ],
+   [
+    "flx:NVDA",
+    "2500000.0"
+   ],
+   [
+    "flx:TSLA",
+    "8000000.0"
+   ],
+   [
+    "flx:XMR",
+    "4000000.0"
+   ]
+  ],
+  "subDeployers": [
+   [
+    "registerAsset",
+    [
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ],
+   [
+    "setOracle",
+    [
+     "0x94757f8dcb4bf73b850195660e959d1105cfedd5",
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ],
+   [
+    "insertMarginTable",
+    [
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ],
+   [
+    "setFeeRecipient",
+    [
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ],
+   [
+    "haltTrading",
+    [
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ],
+   [
+    "setMarginTableIds",
+    [
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ],
+   [
+    "setOpenInterestCaps",
+    [
+     "0x17f5d164a9fa8ed292cdc91e34c0edeed6fc9b90",
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ],
+   [
+    "setFundingMultipliers",
+    [
+     "0xae083732032a813f9142733cdf380e1bc9e518af",
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ],
+   [
+    "setMarginModes",
+    [
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ],
+   [
+    "setDeployerFees",
+    [
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ],
+   [
+    "setFundingInterestRates",
+    [
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ],
+   [
+    "setPerpAnnotation",
+    [
+     "0xd0d4ef34424af3da883672b8cdeca751293655a5"
+    ]
+   ]
+  ],
+  "assetToFundingMultiplier": [
+   [
+    "flx:COIN",
+    "0.0"
+   ],
+   [
+    "flx:CRCL",
+    "0.0"
+   ],
+   [
+    "flx:NVDA",
+    "0.0"
+   ],
+   [
+    "flx:TSLA",
+    "0.0"
+   ],
+   [
+    "flx:XMR",
+    "0.0"
+   ]
+  ],
+  "assetToFundingInterestRate": [],
+  "assetToFundingClamp": []
+ },
+ {
+  "name": "para",
+  "fullName": "Paragon",
+  "deployer": "0x8888888c43cbb7e1c4132542e46831bffd866ed3",
+  "oracleUpdater": "0x8888888c43cbb7e1c4132542e46831bffd866ed3",
+  "feeRecipient": "0x1770f43c71b8b2977771b73ca4c4cbe0c20412ed",
+  "assetToStreamingOiCap": [
+   [
+    "para:AVGO",
+    "25000000.0"
+   ],
+   [
+    "para:BTCD",
+    "10000000.0"
+   ],
+   [
+    "para:OTHERS",
+    "5000000.0"
+   ],
+   [
+    "para:TOTAL2",
+    "5000000.0"
+   ]
+  ],
+  "subDeployers": [
+   [
+    "setOracle",
+    [
+     "0x764ed9d59c91a2c653fd50c43585917366244335",
+     "0x8888888c43cbb7e1c4132542e46831bffd866ed3"
+    ]
+   ]
+  ],
+  "assetToFundingMultiplier": [
+   [
+    "para:AVGO",
+    "0.6"
+   ],
+   [
+    "para:BTCD",
+    "0.6"
+   ],
+   [
+    "para:OTHERS",
+    "0.6"
+   ],
+   [
+    "para:TOTAL2",
+    "0.6"
+   ]
+  ],
+  "assetToFundingInterestRate": [],
+  "assetToFundingClamp": []
+ }
+]

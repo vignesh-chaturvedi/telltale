@@ -1,0 +1,27 @@
+{
+ "totalOiCap": "200000000.0",
+ "oiSzCapPerPerp": "10000000000.0",
+ "maxTransferNtl": "300000000.0",
+ "coinToOiCap": [
+  [
+   "flx:COIN",
+   "8000000.0"
+  ],
+  [
+   "flx:CRCL",
+   "5000000.0"
+  ],
+  [
+   "flx:NVDA",
+   "2500000.0"
+  ],
+  [
+   "flx:TSLA",
+   "8000000.0"
+  ],
+  [
+   "flx:XMR",
+   "4000000.0"
+  ]
+ ]
+}

@@ -8,6 +8,10 @@
     "node": ">=24"
   },
   "scripts": {
+    "collect": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env apps/collector/src/index.ts",
+    "collect:status": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env apps/collector/src/status.ts",
+    "fixtures:record": "node apps/collector/scripts/record-fixtures.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test \"packages/*/test/**/*.test.ts\" \"apps/*/test/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {

@@ -1,0 +1,65 @@
+[
+ {
+  "channel": "activeAssetCtx",
+  "data": {
+   "coin": "xyz:SP500",
+   "ctx": {
+    "funding": "0.0000039673",
+    "openInterest": "53519.844",
+    "prevDayPx": "7745.8",
+    "dayNtlVlm": "311202067.9366999269",
+    "premium": "-0.0004492831",
+    "oraclePx": "7678.9",
+    "markPx": "7677.0",
+    "midPx": "7675.45",
+    "impactPxs": [
+     "7675.4",
+     "7675.5"
+    ],
+    "dayBaseVlm": "40455.55"
+   }
+  }
+ },
+ {
+  "channel": "activeAssetCtx",
+  "data": {
+   "coin": "xyz:SP500",
+   "ctx": {
+    "funding": "0.0000039673",
+    "openInterest": "53515.866",
+    "prevDayPx": "7745.8",
+    "dayNtlVlm": "311232053.7266999483",
+    "premium": "-0.0004752881",
+    "oraclePx": "7678.5",
+    "markPx": "7676.6",
+    "midPx": "7675.15",
+    "impactPxs": [
+     "7674.501",
+     "7675.2"
+    ],
+    "dayBaseVlm": "40459.46"
+   }
+  }
+ },
+ {
+  "channel": "activeAssetCtx",
+  "data": {
+   "coin": "xyz:SP500",
+   "ctx": {
+    "funding": "0.0000039673",
+    "openInterest": "53515.866",
+    "prevDayPx": "7745.8",
+    "dayNtlVlm": "311232053.7266999483",
+    "premium": "-0.0005014",
+    "oraclePx": "7678.5",
+    "markPx": "7676.6",
+    "midPx": "7674.65",
+    "impactPxs": [
+     "7674.6",
+     "7674.7"
+    ],
+    "dayBaseVlm": "40459.46"
+   }
+  }
+ }
+]
