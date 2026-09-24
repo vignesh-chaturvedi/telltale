@@ -1,12 +1,15 @@
 import { systemClock, type Clock, type TokenBucket } from "./limiter.ts";
-import type { L2Book, PerpAssetCtx, PerpDex, PerpDexLimits, PerpMeta } from "./types.ts";
+import type { Candle, L2Book, PerpAssetCtx, PerpDex, PerpDexLimits, PerpMeta, SpotMeta } from "./types.ts";
 
 export interface InfoRequest {
   type: string;
   [key: string]: unknown;
 }
 
-/** REST weight of an `/info` request, from the official rate-limit table. */
+/**
+ * REST weight of an `/info` request, from the official rate-limit table. `candleSnapshot` also
+ * costs 1 per 60 candles returned; callers asking for many candles should budget for it.
+ */
 export function infoWeight(body: InfoRequest): number {
   switch (body.type) {
     case "l2Book":
@@ -92,7 +95,20 @@ export class InfoClient {
     return this.request({ type: "perpDexLimits", dex });
   }
 
-  l2Book(coin: string): Promise<L2Book> {
-    return this.request({ type: "l2Book", coin });
+  /**
+   * Order book, at most 20 levels per side. `nSigFigs` (2–5) groups prices into coarser buckets
+   * so the 20 levels reach further from mid; without it, deep markets show only a sliver.
+   */
+  l2Book(coin: string, nSigFigs?: 2 | 3 | 4 | 5): Promise<L2Book> {
+    return this.request(nSigFigs ? { type: "l2Book", coin, nSigFigs } : { type: "l2Book", coin });
+  }
+
+  candleSnapshot(coin: string, interval: string, startTime: number, endTime: number): Promise<Candle[]> {
+    return this.request({ type: "candleSnapshot", req: { coin, interval, startTime, endTime } });
+  }
+
+  /** Spot tokens; a DEX's `collateralToken` is an index into `tokens`. */
+  spotMeta(): Promise<SpotMeta> {
+    return this.request({ type: "spotMeta" });
   }
 }

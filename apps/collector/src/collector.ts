@@ -11,7 +11,7 @@ import {
   type WsMessage,
 } from "@telltale/hl";
 import { MINUTE, MinuteAggregator, minuteOf } from "./bars.ts";
-import { planSubscriptions, type SubscriptionPlan } from "./plan.ts";
+import { BOOK_SIG_FIGS, planSubscriptions, type SubscriptionPlan } from "./plan.ts";
 import { Store } from "./store.ts";
 import { decodeAllDexsCtxs, isLive, loadUniverse, marketSetChanged, type Universe } from "./universe.ts";
 
@@ -30,6 +30,10 @@ export interface CollectorOptions {
 }
 
 const POLL_CYCLE_MS = 30_000;
+/** Daily candles feed the 30-day checks; one request every 3 s keeps them within the REST budget. */
+const CANDLE_DAYS = 31;
+const CANDLE_SPACING_MS = 3_000;
+const CANDLES_EVERY_MS = 6 * 60 * 60_000;
 
 export const DEFAULTS = {
   bookStreams: 300,
@@ -50,6 +54,7 @@ export class Collector {
   private plan: SubscriptionPlan | null = null;
   private dexOf = new Map<string, string[]>();
   private live = new Set<string>();
+  private tokenNames = new Map<number, string>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private refreshes = 0;
   private pollIndex = 0;
@@ -65,7 +70,9 @@ export class Collector {
 
   async start(): Promise<void> {
     const { log, network } = this.options;
-    this.universe = await loadUniverse(this.info, { withLimits: true });
+    const spot = await this.info.spotMeta();
+    this.tokenNames = new Map(spot.tokens.map((t) => [t.index, t.name]));
+    this.universe = await loadUniverse(this.info, { withLimits: true, tokenNames: this.tokenNames });
     this.store.saveUniverse(this.universe);
     this.dexOf = this.universe.order;
     this.live = new Set(this.universe.markets.filter(isLive).map((m) => m.coin));
@@ -87,6 +94,7 @@ export class Collector {
     );
 
     this.every("universe", this.options.universeEveryMs, () => this.refreshUniverse());
+    this.every("candles", CANDLES_EVERY_MS, () => this.refreshCandles(), 10_000);
     void this.pollNextBook();
     this.scheduleFlush();
   }
@@ -126,7 +134,11 @@ export class Collector {
   private async refreshUniverse(): Promise<void> {
     const previous = this.universe!;
     this.refreshes++;
-    const next = await loadUniverse(this.info, { withLimits: this.refreshes % this.options.limitsEvery === 0, previous });
+    const next = await loadUniverse(this.info, {
+      withLimits: this.refreshes % this.options.limitsEvery === 0,
+      previous,
+      tokenNames: this.tokenNames,
+    });
     const at = Date.now();
     this.dexOf = next.order;
     this.live = new Set(next.markets.filter(isLive).map((m) => m.coin));
@@ -156,7 +168,7 @@ export class Collector {
     if (coins.length > 0) {
       const coin = coins[this.pollIndex++ % coins.length]!;
       try {
-        const book = await this.info.l2Book(coin);
+        const book = await this.info.l2Book(coin, BOOK_SIG_FIGS);
         if (book?.levels) this.agg.onBook(book, Date.now(), "rest");
       } catch (err) {
         this.options.log(`warn: l2Book ${coin}: ${(err as Error).message}`);
@@ -210,7 +222,25 @@ export class Collector {
     );
   }
 
-  private every(name: string, ms: number, fn: () => Promise<void>): void {
+  /** Fetches 31 daily candles for every live market, one market at a time. */
+  private async refreshCandles(): Promise<void> {
+    const coins = [...this.live];
+    let failed = 0;
+    for (const coin of coins) {
+      if (this.stopped) return;
+      const now = Date.now();
+      try {
+        this.store.writeCandles(coin, await this.info.candleSnapshot(coin, "1d", now - CANDLE_DAYS * 86_400_000, now));
+      } catch (err) {
+        failed++;
+        if (failed <= 3) this.options.log(`warn: candles ${coin}: ${(err as Error).message}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, CANDLE_SPACING_MS));
+    }
+    this.options.log(`daily candles refreshed for ${coins.length - failed}/${coins.length} markets`);
+  }
+
+  private every(name: string, ms: number, fn: () => Promise<void>, firstAfterMs = ms): void {
     const run = async () => {
       try {
         await fn();
@@ -219,6 +249,6 @@ export class Collector {
       }
       if (!this.stopped) this.timers.set(name, setTimeout(run, ms));
     };
-    this.timers.set(name, setTimeout(run, ms));
+    this.timers.set(name, setTimeout(run, firstAfterMs));
   }
 }

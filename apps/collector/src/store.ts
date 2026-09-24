@@ -1,13 +1,14 @@
 import { mkdirSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import type { WsGap } from "@telltale/hl";
+import type { Candle, WsGap } from "@telltale/hl";
 import type { MinuteBar } from "./bars.ts";
 import { dexConfig, type Universe } from "./universe.ts";
 
-const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
-const SCHEMA = `
+/** Version 1: the Phase 1 schema. Later versions are applied by MIGRATIONS. */
+export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS dexes (
   name TEXT PRIMARY KEY,
   full_name TEXT NOT NULL,
@@ -97,6 +98,23 @@ CREATE TABLE IF NOT EXISTS health (
 );
 `;
 
+/** Each entry upgrades the schema by one version: MIGRATIONS[0] takes v1 to v2. */
+const MIGRATIONS = [
+  `
+  ALTER TABLE dexes ADD COLUMN collateral TEXT;
+  CREATE TABLE daily_candles (
+    coin TEXT NOT NULL,
+    day INTEGER NOT NULL,
+    open REAL NOT NULL,
+    high REAL NOT NULL,
+    low REAL NOT NULL,
+    close REAL NOT NULL,
+    volume REAL NOT NULL,
+    PRIMARY KEY (coin, day)
+  ) WITHOUT ROWID;
+  `,
+];
+
 export interface HealthRow {
   ts: number;
   wsOpen: number;
@@ -137,10 +155,7 @@ export class Store {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;");
-    const { user_version } = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
-    if (user_version > SCHEMA_VERSION) throw new Error(`database schema v${user_version} is newer than this code (v${SCHEMA_VERSION})`);
-    this.db.exec(SCHEMA);
-    this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    this.migrate();
 
     this.insertBar = this.db.prepare(`
       INSERT OR REPLACE INTO minute_bars VALUES (
@@ -158,6 +173,19 @@ export class Store {
       INSERT OR REPLACE INTO health VALUES (
         :ts, :wsOpen, :wsConnections, :subscriptions, :wsReceived, :restWeight, :bars, :barsWithCtx, :barsWithBook, :dbBytes
       )`);
+  }
+
+  private migrate(): void {
+    let { user_version: version } = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
+    if (version > SCHEMA_VERSION) throw new Error(`database schema v${version} is newer than this code (v${SCHEMA_VERSION})`);
+    if (version === 0) {
+      this.db.exec(SCHEMA_V1);
+      version = 1;
+    }
+    for (; version < SCHEMA_VERSION; version++) {
+      this.transaction(() => this.db.exec(MIGRATIONS[version - 1]!));
+      this.db.exec(`PRAGMA user_version = ${version + 1}`);
+    }
   }
 
   transaction(fn: () => void): void {
@@ -182,10 +210,12 @@ export class Store {
     const changed: string[] = [];
     const at = universe.fetchedAt;
     const upsertDex = this.db.prepare(`
-      INSERT INTO dexes VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO dexes (name, full_name, deployer, oracle_updater, fee_recipient, collateral_token, active, updated_at, collateral)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (name) DO UPDATE SET full_name = excluded.full_name, deployer = excluded.deployer,
         oracle_updater = excluded.oracle_updater, fee_recipient = excluded.fee_recipient,
-        collateral_token = excluded.collateral_token, active = excluded.active, updated_at = excluded.updated_at`);
+        collateral_token = excluded.collateral_token, active = excluded.active, updated_at = excluded.updated_at,
+        collateral = excluded.collateral`);
     const upsertMarket = this.db.prepare(`
       INSERT INTO markets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (coin) DO UPDATE SET dex = excluded.dex, position = excluded.position, sz_decimals = excluded.sz_decimals,
@@ -194,7 +224,7 @@ export class Store {
         oi_cap_usd = excluded.oi_cap_usd, updated_at = excluded.updated_at`);
     this.transaction(() => {
       for (const d of universe.dexes) {
-        upsertDex.run(d.name, d.fullName, d.deployer, d.oracleUpdater, d.feeRecipient, d.collateralToken, d.active ? 1 : 0, at);
+        upsertDex.run(d.name, d.fullName, d.deployer, d.oracleUpdater, d.feeRecipient, d.collateralToken, d.active ? 1 : 0, at, d.collateral);
         const { body, hash } = dexConfig(universe, d.name);
         const last = this.lastConfigHash.get(d.name) as { hash: string } | undefined;
         if (last?.hash !== hash) {
@@ -210,6 +240,14 @@ export class Store {
       }
     });
     return changed;
+  }
+
+  /** Upserts daily candles for one market; the latest day is replaced as it fills in. */
+  writeCandles(coin: string, candles: readonly Candle[]): void {
+    const upsert = this.db.prepare("INSERT OR REPLACE INTO daily_candles VALUES (?, ?, ?, ?, ?, ?, ?)");
+    this.transaction(() => {
+      for (const c of candles) upsert.run(coin, c.t, Number(c.o), Number(c.h), Number(c.l), Number(c.c), Number(c.v));
+    });
   }
 
   writeGap(gap: WsGap): void {

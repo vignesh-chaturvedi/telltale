@@ -26,7 +26,18 @@ pnpm collect:status     # coverage per minute, WebSocket gaps and storage growth
 
 `pnpm collect --testnet` uses testnet, `--db <path>` picks another database file, and `--minutes <n>` stops after a fixed time.
 
-The collector uses only the public Hyperliquid API and stays inside its per-IP limits. It sends about 750 WebSocket subscriptions over 4 connections and uses about 300 REST weight a minute. Every live market gets one row per minute with oracle, mark, open interest, funding, order-book depth within 1%, 2% and 5% of mid, and trade flow. HIP-3 markets also get oracle update timing.
+The collector uses only the public Hyperliquid API and stays inside its per-IP limits. It sends about 750 WebSocket subscriptions over 4 connections and uses about 300 REST weight a minute. Every live market gets one row per minute with oracle, mark, open interest, funding, impact spread, order-book depth within 1%, 2% and 5% of mid, and trade flow. HIP-3 markets also get oracle update timing. Daily candles for the last 31 days are refreshed every 6 hours.
+
+## Grading markets
+
+```bash
+pnpm score                      # every DEX and market, weakest first, over the last 60 minutes
+pnpm score --coin xyz:SP500     # one market's metrics, grade and reasons
+pnpm score --dex xyz --window 120
+pnpm score --json               # the full scorecard, for other tools
+```
+
+Each market gets a grade from A (Strong) to E (Fragile), built from depth against open interest, the cost to move the price to liquidation levels, the gap between the mid price and the oracle, agreement with other deployers of the same ticker, and 50%+ daily moves. [docs/methodology.md](docs/methodology.md) defines every metric and threshold, and lists what the grades can't tell you.
 
 ## Development
 

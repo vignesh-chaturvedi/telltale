@@ -36,11 +36,13 @@ export interface MinuteBar {
   oracleChanges: number | null;
   /** Longest time the oracle price stayed unchanged, as observed during this minute. */
   oracleMaxGapMs: number | null;
+  /** Gap between the impact bid and ask (the prices for the exchange's standard impact size), in bps of mid. */
+  spreadBps: number | null;
   bookSource: Source | null;
   bookUpdates: number;
+  /** Best bid and ask of the grouped book, so accurate only to the bucket size. */
   bestBid: number | null;
   bestAsk: number | null;
-  spreadBps: number | null;
   bidDepth1: number | null;
   askDepth1: number | null;
   bidDepth2: number | null;
@@ -95,6 +97,12 @@ function emptyBar(coin: string, ts: number): MinuteBar {
 
 const num = (s: string | null | undefined): number | null => (s === null || s === undefined ? null : Number(s));
 
+function impactSpreadBps(ctx: PerpAssetCtx): number | null {
+  const mid = num(ctx.midPx);
+  if (!ctx.impactPxs || !mid) return null;
+  return ((Number(ctx.impactPxs[1]) - Number(ctx.impactPxs[0])) / mid) * 10_000;
+}
+
 interface OracleTrack {
   px: string;
   lastSeenAt: number;
@@ -129,6 +137,7 @@ export class MinuteAggregator {
     bar.funding = num(ctx.funding);
     bar.premium = num(ctx.premium);
     bar.dayNtlVlm = num(ctx.dayNtlVlm);
+    bar.spreadBps = impactSpreadBps(ctx);
   }
 
   private trackOracle(bar: MinuteBar, px: string, at: number): void {
@@ -157,7 +166,6 @@ export class MinuteAggregator {
     bar.bookSource = source;
     bar.bestBid = s.bestBid;
     bar.bestAsk = s.bestAsk;
-    bar.spreadBps = s.spreadBps;
     bar.bidDepth1 = s.bidDepth[1];
     bar.askDepth1 = s.askDepth[1];
     bar.bidDepth2 = s.bidDepth[2];

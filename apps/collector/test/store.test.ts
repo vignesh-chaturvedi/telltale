@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { PerpMeta } from "@telltale/hl";
+import type { Candle, PerpMeta } from "@telltale/hl";
 import type { MinuteBar } from "../src/bars.ts";
-import { Store } from "../src/store.ts";
+import { SCHEMA_V1, SCHEMA_VERSION, Store } from "../src/store.ts";
 import { loadUniverse } from "../src/universe.ts";
 import { fixtureInfo } from "./fixtures.ts";
 
@@ -114,9 +115,39 @@ test("reopens an existing database without migrating it again", () => {
     a.close();
     const b = new Store(path);
     assert.equal((b.db.prepare("SELECT count(*) AS n FROM minute_bars").get() as { n: number }).n, 1);
-    assert.equal((b.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 1);
+    assert.equal((b.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, SCHEMA_VERSION);
     b.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("upgrades a Phase 1 (v1) database in place", () => {
+  const dir = mkdtempSync(join(tmpdir(), "telltale-"));
+  try {
+    const path = join(dir, "v1.db");
+    const old = new DatabaseSync(path);
+    old.exec(SCHEMA_V1);
+    old.exec("PRAGMA user_version = 1");
+    old.prepare("INSERT INTO dexes VALUES ('xyz', 'XYZ', null, null, null, 0, 1, 1)").run();
+    old.close();
+
+    const store = new Store(path);
+    assert.equal((store.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, SCHEMA_VERSION);
+    assert.deepEqual({ ...(store.db.prepare("SELECT name, collateral FROM dexes").get() as object) }, { name: "xyz", collateral: null });
+    store.writeCandles("xyz:A", [{ t: 86_400_000, T: 172_799_999, s: "xyz:A", i: "1d", o: "1", h: "2", l: "0.5", c: "1.5", v: "10", n: 3 } satisfies Candle]);
+    assert.equal((store.db.prepare("SELECT high FROM daily_candles").get() as { high: number }).high, 2);
+    store.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("names each DEX's collateral token", async () => {
+  const store = new Store(":memory:");
+  const u = await loadUniverse(fixtureInfo(), { withLimits: true, tokenNames: new Map([[0, "USDC"], [360, "USDH"]]) });
+  store.saveUniverse(u);
+  const rows = store.db.prepare("SELECT name, collateral FROM dexes ORDER BY name").all();
+  assert.equal((rows.find((r) => r.name === "xyz") as { collateral: string }).collateral, "USDC");
+  store.close();
 });

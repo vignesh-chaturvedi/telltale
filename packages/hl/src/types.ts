@@ -94,3 +94,31 @@ export interface ActiveAssetCtxData {
 export interface AllDexsAssetCtxsData {
   ctxs: [string, PerpAssetCtx[]][];
 }
+
+/** One candle from `candleSnapshot`. Prices and volume are decimal strings; times are epoch ms. */
+export interface Candle {
+  /** Open time. */
+  t: number;
+  /** Close time. */
+  T: number;
+  s: string;
+  i: string;
+  o: string;
+  c: string;
+  h: string;
+  l: string;
+  v: string;
+  n: number;
+}
+
+export interface SpotToken {
+  name: string;
+  index: number;
+  szDecimals: number;
+  weiDecimals: number;
+}
+
+export interface SpotMeta {
+  tokens: SpotToken[];
+  universe: unknown[];
+}

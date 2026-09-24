@@ -11,6 +11,8 @@ export interface DexInfo {
   oracleUpdater: string | null;
   feeRecipient: string | null;
   collateralToken: number;
+  /** Name of the collateral token, e.g. "USDC", when spot metadata was available. */
+  collateral: string | null;
   /** Any 24h volume at load time. Core always counts as active. */
   active: boolean;
   /** HIP-3 only; `null` for core or when limits weren't refreshed this round. */
@@ -53,6 +55,8 @@ export interface LoadOptions {
   /** Fetch `perpDexLimits` for every HIP-3 DEX (5 requests). Otherwise reuse `previous` limits. */
   withLimits: boolean;
   previous?: Universe;
+  /** Spot token names by index, to name each DEX's collateral. */
+  tokenNames?: ReadonlyMap<number, string>;
   now?: () => number;
 }
 
@@ -87,6 +91,7 @@ export async function loadUniverse(info: InfoClient, options: LoadOptions): Prom
       oracleUpdater: raw?.oracleUpdater ?? null,
       feeRecipient: raw?.feeRecipient ?? null,
       collateralToken: meta.collateralToken,
+      collateral: options.tokenNames?.get(meta.collateralToken) ?? null,
       active: name === CORE_DEX || volume > 0,
       limits: dexLimits,
       raw,

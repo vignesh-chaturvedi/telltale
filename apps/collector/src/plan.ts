@@ -1,6 +1,13 @@
 import type { Subscription } from "@telltale/hl";
 import { CORE_DEX, isLive, type Universe } from "./universe.ts";
 
+/**
+ * Books are requested with prices grouped to 3 significant figures. Full precision shows only
+ * 20 ticks per side, which for BTC reaches 0.02% from mid; 3 figures reaches past 2% on every
+ * market, which is what depth metrics need.
+ */
+export const BOOK_SIG_FIGS = 3;
+
 export interface PlanOptions {
   /** Markets whose order book and trades are streamed; the rest are polled over REST. */
   bookStreams: number;
@@ -43,7 +50,7 @@ export function planSubscriptions(universe: Universe, options: PlanOptions): Sub
     { type: "allDexsAssetCtxs" },
     ...ctxStreamed.map((coin) => ({ type: "activeAssetCtx", coin })),
     ...bookStreamed.flatMap((coin) => [
-      { type: "l2Book", coin },
+      { type: "l2Book", coin, nSigFigs: BOOK_SIG_FIGS },
       { type: "trades", coin },
     ]),
   ];
