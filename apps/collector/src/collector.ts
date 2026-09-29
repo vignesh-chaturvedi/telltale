@@ -26,6 +26,8 @@ export interface CollectorOptions {
   universeEveryMs: number;
   /** Refresh OI caps on every Nth universe refresh. */
   limitsEvery: number;
+  /** Days of minute bars to keep; older ones are rolled into 15-minute bars. */
+  keepMinuteDays: number;
   log: (line: string) => void;
 }
 
@@ -34,12 +36,14 @@ const POLL_CYCLE_MS = 30_000;
 const CANDLE_DAYS = 31;
 const CANDLE_SPACING_MS = 3_000;
 const CANDLES_EVERY_MS = 6 * 60 * 60_000;
+const RETENTION_EVERY_MS = 60 * 60_000;
 
 export const DEFAULTS = {
   bookStreams: 300,
   restWeightPerMinute: 1000,
   universeEveryMs: 60_000,
   limitsEvery: 5,
+  keepMinuteDays: 14,
 } satisfies Partial<CollectorOptions>;
 
 /** Streams every live Hyperliquid market into minute bars in SQLite. */
@@ -95,6 +99,7 @@ export class Collector {
 
     this.every("universe", this.options.universeEveryMs, () => this.refreshUniverse());
     this.every("candles", CANDLES_EVERY_MS, () => this.refreshCandles(), 10_000);
+    this.every("retention", RETENTION_EVERY_MS, async () => this.applyRetention(), 5 * 60_000);
     void this.pollNextBook();
     this.scheduleFlush();
   }
@@ -220,6 +225,13 @@ export class Collector {
         ` | ws ${stats.open}/${stats.connections} subs ${stats.subscriptions} msgs ${received} | rest ${restWeight}/min` +
         ` | db ${(health.dbBytes / 1e6).toFixed(1)} MB`,
     );
+  }
+
+  /** Keeps disk use flat: minute bars past the retention window become 15-minute bars. */
+  private applyRetention(): void {
+    const { keepMinuteDays, log } = this.options;
+    const { minuteBars, rolledBars } = this.store.rollUp(Date.now() - keepMinuteDays * 86_400_000);
+    if (minuteBars) log(`retention: rolled ${minuteBars} minute bars older than ${keepMinuteDays} days into ${rolledBars} 15-minute bars`);
   }
 
   /** Fetches 31 daily candles for every live market, one market at a time. */

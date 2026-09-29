@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { Candle, PerpMeta } from "@telltale/hl";
 import type { MinuteBar } from "../src/bars.ts";
-import { SCHEMA_V1, SCHEMA_VERSION, Store } from "../src/store.ts";
+import { ROLLUP_MS, SCHEMA_V1, SCHEMA_VERSION, Store } from "../src/store.ts";
 import { loadUniverse } from "../src/universe.ts";
 import { fixtureInfo } from "./fixtures.ts";
 
@@ -149,5 +149,42 @@ test("names each DEX's collateral token", async () => {
   store.saveUniverse(u);
   const rows = store.db.prepare("SELECT name, collateral FROM dexes ORDER BY name").all();
   assert.equal((rows.find((r) => r.name === "xyz") as { collateral: string }).collateral, "USDC");
+  store.close();
+});
+
+test("rolls minute bars past the cutoff into 15-minute bars", () => {
+  const store = new Store(":memory:");
+  const t0 = Math.floor(1_790_000_000_000 / ROLLUP_MS) * ROLLUP_MS;
+  const bars = Array.from({ length: 20 }, (_, i) => ({
+    ...bar,
+    ts: t0 + i * 60_000,
+    oraclePx: 100,
+    midPx: 100 + i,
+    trades: 1,
+    buyNtl: 10,
+    bidDepth2: 1000 + i * 10,
+    minDepth2: 500 - i,
+  }));
+  store.writeBars(bars);
+  store.writeHealth({ ts: t0, wsOpen: 4, wsConnections: 4, subscriptions: 752, wsReceived: 1, restWeight: 1, bars: 1, barsWithCtx: 1, barsWithBook: 1, dbBytes: 1 });
+
+  // 17 minutes in: only the first full quarter hour is rolled up, never part of one.
+  assert.deepEqual(store.rollUp(t0 + 17 * 60_000), { minuteBars: 15, rolledBars: 1 });
+  const row = store.db.prepare("SELECT * FROM bars_15m").get() as Record<string, number>;
+  assert.equal(row.ts, t0);
+  assert.equal(row.minutes, 15);
+  assert.equal(row.mid_px, 114, "prices are the last minute's");
+  assert.equal(row.mid_high, 114);
+  assert.equal(row.mid_low, 100);
+  assert.equal(row.oracle_gap_max_bps, 1400);
+  assert.equal(row.bid_depth_2, 1070, "depth is the average");
+  assert.equal(row.min_depth_2, 486, "and the thinnest book is kept");
+  assert.equal(row.trades, 15);
+  assert.equal(row.buy_ntl, 150);
+  const left = store.db.prepare("SELECT count(*) AS n, min(ts) AS first FROM minute_bars").get() as { n: number; first: number };
+  assert.deepEqual({ ...left }, { n: 5, first: t0 + 15 * 60_000 });
+  assert.equal((store.db.prepare("SELECT count(*) AS n FROM health").get() as { n: number }).n, 0);
+
+  assert.deepEqual(store.rollUp(t0 + 17 * 60_000), { minuteBars: 0, rolledBars: 0 }, "running again changes nothing");
   store.close();
 });

@@ -1,0 +1,29 @@
+[Unit]
+Description=Telltale website and JSON API
+Wants=network-online.target
+After=network-online.target telltale-collector.service
+
+[Service]
+Type=simple
+User=telltale
+Group=telltale
+WorkingDirectory=/opt/telltale
+Environment=NODE_ENV=production
+Environment=TELLTALE_DB=/var/lib/telltale/telltale.db
+Environment=HOST=127.0.0.1
+Environment=PORT=8740
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning --env-file-if-exists=/etc/telltale.env apps/collector/src/serve.ts --web /opt/telltale/apps/web/dist
+Restart=always
+# The server exits if the database doesn't exist yet, so give the collector time to create it.
+RestartSec=10
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# Read-only access is enough, but SQLite needs to write the WAL index next to the database.
+ReadWritePaths=/var/lib/telltale
+MemoryMax=800M
+
+[Install]
+WantedBy=multi-user.target

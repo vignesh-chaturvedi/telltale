@@ -1,0 +1,28 @@
+[Unit]
+Description=Telltale collector: streams every Hyperliquid market into SQLite
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=telltale
+Group=telltale
+WorkingDirectory=/opt/telltale
+Environment=NODE_ENV=production
+Environment=TELLTALE_DB=/var/lib/telltale/telltale.db
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning --env-file-if-exists=/etc/telltale.env apps/collector/src/index.ts
+Restart=always
+RestartSec=5
+# Stop cleanly: the collector flushes the current minute on SIGTERM.
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/telltale
+MemoryMax=1500M
+
+[Install]
+WantedBy=multi-user.target

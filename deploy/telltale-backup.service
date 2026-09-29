@@ -1,0 +1,15 @@
+[Unit]
+Description=Telltale nightly database backup
+
+[Service]
+Type=oneshot
+User=telltale
+Group=telltale
+WorkingDirectory=/var/lib/telltale
+ExecStart=/opt/telltale/deploy/backup.sh
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/telltale

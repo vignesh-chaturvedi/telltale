@@ -130,8 +130,25 @@ test("reconnects after a drop, resubscribes, and reports the outage as a gap", (
 
   assert.deepEqual(subscribeMessages(sockets[1]!), [sub("A"), sub("B")]);
   assert.equal(gaps.length, 1);
-  assert.deepEqual(gaps[0], { connection: 0, startedAt: 1_000_100, endedAt: 1_001_100, subscriptions: 2, reason: "closed 1006" });
+  // Nothing arrived after the open at 1,000,000, so that is when data stopped.
+  assert.deepEqual(gaps[0], { connection: 0, startedAt: 1_000_000, endedAt: 1_001_100, subscriptions: 2, reason: "closed 1006" });
   assert.equal(pool.stats().reconnects, 1);
+  pool.close();
+});
+
+test("dates a gap from the last message received, not from when the close was noticed", () => {
+  const pool = makePool();
+  pool.subscribe([sub("A")]);
+  sockets[0]!.open();
+  sockets[0]!.receive({ channel: "l2Book", data: { coin: "A" } });
+  // The machine sleeps for 9 minutes; the close only arrives after waking.
+  clock += 9 * 60_000;
+  sockets[0]!.drop(1006);
+  advance(1000);
+  sockets[1]!.open();
+  assert.equal(gaps.length, 1);
+  assert.equal(gaps[0]!.startedAt, 1_000_000);
+  assert.equal(gaps[0]!.endedAt, 1_000_000 + 9 * 60_000 + 1000);
   pool.close();
 });
 

@@ -1,0 +1,21 @@
+# Caddy terminates HTTPS (certificates from Let's Encrypt, renewed automatically) and passes
+# everything to the Telltale server, which listens on localhost only.
+telltale.markets {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	reverse_proxy 127.0.0.1:8740
+	log {
+		output file /var/log/caddy/telltale.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
+
+www.telltale.markets {
+	redir https://telltale.markets{uri} permanent
+}

@@ -5,7 +5,7 @@ import type { Candle, WsGap } from "@telltale/hl";
 import type { MinuteBar } from "./bars.ts";
 import { dexConfig, type Universe } from "./universe.ts";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** Version 1: the Phase 1 schema. Later versions are applied by MIGRATIONS. */
 export const SCHEMA_V1 = `
@@ -113,7 +113,62 @@ const MIGRATIONS = [
     PRIMARY KEY (coin, day)
   ) WITHOUT ROWID;
   `,
+  // Minute bars older than the retention window are rolled into these. Prices, open interest and
+  // funding are the last minute's; depth and spread are averages; the rest are sums or extremes.
+  `
+  CREATE TABLE bars_15m (
+    coin TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    minutes INTEGER NOT NULL,
+    oracle_px REAL,
+    mark_px REAL,
+    mid_px REAL,
+    mid_high REAL,
+    mid_low REAL,
+    open_interest REAL,
+    funding REAL,
+    day_ntl_vlm REAL,
+    oracle_gap_max_bps REAL,
+    oracle_max_gap_ms INTEGER,
+    spread_bps REAL,
+    bid_depth_1 REAL,
+    ask_depth_1 REAL,
+    bid_depth_2 REAL,
+    ask_depth_2 REAL,
+    bid_depth_5 REAL,
+    ask_depth_5 REAL,
+    min_depth_2 REAL,
+    trades INTEGER NOT NULL,
+    buy_ntl REAL NOT NULL,
+    sell_ntl REAL NOT NULL,
+    max_trade_ntl REAL NOT NULL,
+    PRIMARY KEY (coin, ts)
+  ) WITHOUT ROWID;
+  `,
 ];
+
+export const ROLLUP_MS = 15 * 60_000;
+
+// Integer division buckets each minute into its quarter hour. The literal keeps it integer
+// arithmetic, since bound JS numbers arrive as REAL.
+const ROLLUP_SQL = `
+WITH agg AS (
+  SELECT coin, (ts / ${ROLLUP_MS}) * ${ROLLUP_MS} AS bucket, MAX(ts) AS last_ts, COUNT(*) AS minutes,
+    MAX(mid_px) AS mid_high, MIN(mid_px) AS mid_low,
+    ROUND(MAX(CASE WHEN oracle_px > 0 AND mid_px IS NOT NULL THEN ABS(mid_px - oracle_px) / oracle_px * 10000 END), 2) AS gap_bps,
+    MAX(oracle_max_gap_ms) AS oracle_max_gap_ms, AVG(spread_bps) AS spread_bps,
+    ROUND(AVG(bid_depth_1)) AS bid_depth_1, ROUND(AVG(ask_depth_1)) AS ask_depth_1,
+    ROUND(AVG(bid_depth_2)) AS bid_depth_2, ROUND(AVG(ask_depth_2)) AS ask_depth_2,
+    ROUND(AVG(bid_depth_5)) AS bid_depth_5, ROUND(AVG(ask_depth_5)) AS ask_depth_5,
+    MIN(min_depth_2) AS min_depth_2, SUM(trades) AS trades, SUM(buy_ntl) AS buy_ntl, SUM(sell_ntl) AS sell_ntl,
+    MAX(max_trade_ntl) AS max_trade_ntl
+  FROM minute_bars WHERE ts < :cutoff GROUP BY coin, bucket
+)
+INSERT OR REPLACE INTO bars_15m
+SELECT a.coin, a.bucket, a.minutes, b.oracle_px, b.mark_px, b.mid_px, a.mid_high, a.mid_low, b.open_interest, b.funding,
+  b.day_ntl_vlm, a.gap_bps, a.oracle_max_gap_ms, a.spread_bps, a.bid_depth_1, a.ask_depth_1, a.bid_depth_2, a.ask_depth_2,
+  a.bid_depth_5, a.ask_depth_5, a.min_depth_2, a.trades, a.buy_ntl, a.sell_ntl, a.max_trade_ntl
+FROM agg a JOIN minute_bars b ON b.coin = a.coin AND b.ts = a.last_ts`;
 
 export interface HealthRow {
   ts: number;
@@ -248,6 +303,22 @@ export class Store {
     this.transaction(() => {
       for (const c of candles) upsert.run(coin, c.t, Number(c.o), Number(c.h), Number(c.l), Number(c.c), Number(c.v));
     });
+  }
+
+  /**
+   * Rolls minute bars from before `before` (rounded down to a quarter hour, so no bucket is
+   * split) into 15-minute bars, then deletes them and the matching health rows.
+   */
+  rollUp(before: number): { minuteBars: number; rolledBars: number } {
+    const cutoff = Math.floor(before / ROLLUP_MS) * ROLLUP_MS;
+    let result = { minuteBars: 0, rolledBars: 0 };
+    this.transaction(() => {
+      const rolled = this.db.prepare(ROLLUP_SQL).run({ cutoff });
+      const deleted = this.db.prepare("DELETE FROM minute_bars WHERE ts < ?").run(cutoff);
+      this.db.prepare("DELETE FROM health WHERE ts < ?").run(cutoff);
+      result = { minuteBars: Number(deleted.changes), rolledBars: Number(rolled.changes) };
+    });
+    return result;
   }
 
   writeGap(gap: WsGap): void {

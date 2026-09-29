@@ -26,8 +26,8 @@ const size = (p: string) => {
 };
 
 const live = one<{ n: number }>("SELECT count(*) AS n FROM markets WHERE is_delisted = 0").n;
-const span = one<{ first: number | null; last: number | null; bars: number }>(
-  "SELECT min(ts) AS first, max(ts) AS last, count(*) AS bars FROM minute_bars",
+const span = one<{ first: number | null; last: number | null; bars: number; minutes: number }>(
+  "SELECT min(ts) AS first, max(ts) AS last, count(*) AS bars, count(DISTINCT ts) AS minutes FROM minute_bars",
 );
 if (span.last === null || span.first === null) {
   console.log(`No bars yet in ${values.db}.`);
@@ -48,9 +48,25 @@ console.log(`Database  ${values.db}  ${mb.toFixed(1)} MB`);
 console.log(
   `Covered   ${new Date(span.first).toISOString()} → ${new Date(span.last + 60_000).toISOString()} (${hours.toFixed(2)} h, ${span.bars} bars)`,
 );
-const growth = ((barBytes ?? bytes) / 1e6 / hours) * 24;
+// Per minute actually collected, so time the collector wasn't running doesn't dilute the rate.
+const growth = ((barBytes ?? bytes) / 1e6 / span.minutes) * 1440;
 console.log(`Growth    ${growth.toFixed(0)} MB/day at the current rate${barBytes === null ? " (whole file)" : " (minute bars and their index)"}`);
-console.log(`Markets   ${live} live\n`);
+console.log(`Markets   ${live} live`);
+
+// Minutes with no bars at all: the collector wasn't running, or the machine was asleep.
+const minutes = all<{ ts: number }>("SELECT DISTINCT ts FROM minute_bars ORDER BY ts").map((r) => r.ts);
+const holes: [number, number][] = [];
+for (let i = 1; i < minutes.length; i++) {
+  const gap = (minutes[i]! - minutes[i - 1]!) / 60_000 - 1;
+  if (gap > 0) holes.push([minutes[i - 1]! + 60_000, gap]);
+}
+const missing = holes.reduce((n, [, g]) => n + g, 0);
+const hhmm = (t: number) => new Date(t).toISOString().slice(5, 16).replace("T", " ");
+console.log(
+  `Missing   ${missing} minute${missing === 1 ? "" : "s"} with no data` +
+    (holes.length ? `: ${holes.slice(-5).map(([t, g]) => `${hhmm(t)} (${g} min)`).join(", ")}${holes.length > 5 ? ` and ${holes.length - 5} earlier` : ""}` : "") +
+    "\n",
+);
 
 const window = Number(values.minutes);
 const since = span.last - (window - 1) * 60_000;
@@ -69,13 +85,13 @@ for (const r of perMinute) {
   );
 }
 
-const missing = all<{ coin: string }>(
+const bookless = all<{ coin: string }>(
   `SELECT coin FROM markets WHERE is_delisted = 0
    AND coin NOT IN (SELECT coin FROM minute_bars WHERE ts >= ? AND book_source IS NOT NULL) ORDER BY coin`,
   since,
 );
-console.log(`\nLive markets without any book in the last ${window} min: ${missing.length}`);
-if (missing.length) console.log(`  ${missing.slice(0, 30).map((m) => m.coin).join(", ")}${missing.length > 30 ? ", …" : ""}`);
+console.log(`\nLive markets without any book in the last ${window} min: ${bookless.length}`);
+if (bookless.length) console.log(`  ${bookless.slice(0, 30).map((m) => m.coin).join(", ")}${bookless.length > 30 ? ", …" : ""}`);
 
 const gaps = all<{ connection: number; started_at: number; ended_at: number; subscriptions: number; reason: string }>(
   "SELECT * FROM ws_gaps ORDER BY started_at DESC LIMIT 10",

@@ -277,7 +277,9 @@ class WsConnection {
     if (this.closed) return;
     const { now, random, onLog } = this.pool.options;
     if (this.downSince === null) {
-      this.downSince = now();
+      // Data stopped at the last message, not when we noticed the close. After the machine
+      // sleeps, the close is only seen on waking, which would hide the whole outage.
+      this.downSince = this.lastMessageAt || now();
       this.downReason = reason;
     }
     const delay = Math.min(30_000, 1000 * 2 ** this.attempts) * (0.5 + random() / 2);

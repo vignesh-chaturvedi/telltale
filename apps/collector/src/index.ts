@@ -1,4 +1,4 @@
-// Runs the collector: `pnpm collect [--testnet] [--db path] [--minutes n]`.
+// Runs the collector: `pnpm collect [--testnet] [--db path] [--minutes n] [--keep-days 14]`.
 import { parseArgs } from "node:util";
 import { MAINNET, TESTNET } from "@telltale/hl";
 import { Collector, DEFAULTS } from "./collector.ts";
@@ -9,6 +9,7 @@ const { values } = parseArgs({
     db: { type: "string", default: process.env.TELLTALE_DB ?? "data/telltale.db" },
     minutes: { type: "string" },
     "book-streams": { type: "string", default: String(DEFAULTS.bookStreams) },
+    "keep-days": { type: "string", default: String(DEFAULTS.keepMinuteDays) },
   },
 });
 
@@ -19,6 +20,7 @@ const collector = new Collector({
   network: values.testnet ? TESTNET : MAINNET,
   dbPath: values.db,
   bookStreams: Number(values["book-streams"]),
+  keepMinuteDays: Number(values["keep-days"]),
   log,
 });
 

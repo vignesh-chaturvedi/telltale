@@ -2,7 +2,7 @@
 
 Live safety ratings for every market on Hyperliquid.
 
-Telltale grades each Hyperliquid market (core perps, HIP-3 exchanges and HIP-4 venues) on published metrics: oracle freshness, order-book depth against open interest, position concentration and recent deployer changes. It raises an alert when a market starts to look like a past manipulation incident.
+Telltale grades every live Hyperliquid perpetual market, core and HIP-3, from A (Strong) to E (Fragile) on published metrics: order-book depth against open interest, the cost to move the price to liquidation levels, the gap between the market and its oracle, agreement between deployers listing the same asset, and 50%+ daily moves. Every grade comes with the numbers behind it. Alerts for markets that start to look like past manipulation incidents are in progress.
 
 Status: in development for the Hyperliquid track of Colosseum's Crypto World's Fair (Sep 14 – Oct 12, 2026).
 
@@ -10,7 +10,9 @@ Status: in development for the Hyperliquid track of Colosseum's Crypto World's F
 
 - `packages/detectors`: metrics and detectors as pure functions, with no dependencies
 - `packages/hl`: read-only Hyperliquid API clients and types
-- `apps/collector`: the live data pipeline, grading, alerts and JSON API
+- `apps/collector`: the live data pipeline, grading and the JSON API
+- `apps/web`: the website (Vite, React, Tailwind), served by the API server in production
+- `deploy`: server setup, systemd units and the Caddy config
 
 ## Requirements
 
@@ -24,7 +26,7 @@ pnpm collect            # streams mainnet into data/telltale.db; Ctrl-C stops it
 pnpm collect:status     # coverage per minute, WebSocket gaps and storage growth
 ```
 
-`pnpm collect --testnet` uses testnet, `--db <path>` picks another database file, and `--minutes <n>` stops after a fixed time.
+`pnpm collect --testnet` uses testnet, `--db <path>` picks another database file, and `--minutes <n>` stops after a fixed time. Minute bars take about 95 MB a day. They're kept for 14 days (`--keep-days <n>`); every hour, older ones are rolled into 15-minute bars, so after two weeks the database levels off at about 1.3 GB and grows by roughly 6 MB a day.
 
 The collector uses only the public Hyperliquid API and stays inside its per-IP limits. It sends about 750 WebSocket subscriptions over 4 connections and uses about 300 REST weight a minute. Every live market gets one row per minute with oracle, mark, open interest, funding, impact spread, order-book depth within 1%, 2% and 5% of mid, and trade flow. HIP-3 markets also get oracle update timing. Daily candles for the last 31 days are refreshed every 6 hours.
 
@@ -38,6 +40,33 @@ pnpm score --json               # the full scorecard, for other tools
 ```
 
 Each market gets a grade from A (Strong) to E (Fragile), built from depth against open interest, the cost to move the price to liquidation levels, the gap between the mid price and the oracle, agreement with other deployers of the same ticker, and 50%+ daily moves. [docs/methodology.md](docs/methodology.md) defines every metric and threshold, and lists what the grades can't tell you.
+
+## Website and API
+
+```bash
+pnpm serve              # JSON API and the built website on http://127.0.0.1:8740
+pnpm web                # website with hot reload on http://localhost:5178, using the API above
+pnpm build              # production build into apps/web/dist, which `pnpm serve` picks up
+```
+
+The API recomputes every grade once a minute:
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/board` | Every market and DEX with its grade, reasons and key numbers |
+| `GET /api/markets/:coin` | One market's metrics, grade breakdown and the last 24 hours in 5-minute steps |
+| `GET /api/dexes/:slug` | One DEX and its markets (`core` for Hyperliquid's own) |
+| `GET /api/health` | Age of the newest data; `ok` is false once it's over 3 minutes old |
+
+## Deploying
+
+Telltale runs on one small VM: the collector and the server as systemd services, with Caddy in front for HTTPS. On a fresh Ubuntu 24.04 server:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vignesh-chaturvedi/telltale/main/deploy/setup.sh | bash
+```
+
+Then point the domain's `A` records (`@` and `www`) at the server's public IP; Caddy fetches certificates on its own. After that, `TELLTALE_HOST=ubuntu@<ip> deploy/deploy.sh` ships whatever is on `main`.
 
 ## Development
 

@@ -11,5 +11,8 @@
   "dependencies": {
     "@telltale/detectors": "workspace:*",
     "@telltale/hl": "workspace:*"
+  },
+  "exports": {
+    "./api-types": "./src/api-types.ts"
   }
 }
