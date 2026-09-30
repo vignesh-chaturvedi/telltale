@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time setup of a fresh Ubuntu 24.04 server (Oracle Cloud Ampere A1 or any arm64/x64 VM).
+# One-time setup of a fresh Ubuntu 24.04 server (GCP, Oracle Cloud or any arm64/x64 VM).
 # Run it on the server as the default sudo user:
 #   curl -fsSL https://raw.githubusercontent.com/vignesh-chaturvedi/telltale/main/deploy/setup.sh | bash
 # It's safe to run again: every step checks what's already there.
@@ -36,13 +36,17 @@ fi
 
 say "Firewall: allow HTTP and HTTPS"
 # Oracle's Ubuntu images ship iptables rules that reject everything except SSH, on top of the
-# cloud security list. Insert the web ports before that reject rule and keep them across reboots.
-for port in 80 443; do
-  if ! sudo iptables -C INPUT -p tcp --dport "$port" -m state --state NEW -j ACCEPT 2>/dev/null; then
-    sudo iptables -I INPUT 5 -p tcp --dport "$port" -m state --state NEW -j ACCEPT
-  fi
-done
-sudo netfilter-persistent save
+# cloud firewall. Where such a reject rule exists, open the web ports just before it and keep
+# that across reboots. Other clouds (GCP, AWS) filter only in the cloud firewall.
+reject=$(sudo iptables -L INPUT --line-numbers -n | awk '$2 == "REJECT" { print $1; exit }')
+if [ -n "$reject" ]; then
+  for port in 80 443; do
+    if ! sudo iptables -C INPUT -p tcp --dport "$port" -m state --state NEW -j ACCEPT 2>/dev/null; then
+      sudo iptables -I INPUT "$reject" -p tcp --dport "$port" -m state --state NEW -j ACCEPT
+    fi
+  done
+  sudo netfilter-persistent save
+fi
 
 say "Service user and folders"
 id telltale >/dev/null 2>&1 || sudo useradd --system --home "$DATA" --shell /usr/sbin/nologin telltale

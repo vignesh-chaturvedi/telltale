@@ -1,0 +1,21 @@
+# Checks the live site every 15 minutes. A failed run means the site is down or its data is
+# more than 3 minutes old, and GitHub emails the repository owner.
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check https://telltale.markets/api/health
+        run: |
+          body=$(curl -fsS --max-time 20 --retry 2 --retry-delay 15 --retry-all-errors https://telltale.markets/api/health)
+          echo "$body"
+          echo "$body" | jq -e '.ok == true' > /dev/null
