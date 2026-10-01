@@ -70,9 +70,9 @@ test("rewriting a bar for the same minute replaces it", () => {
 test("stores a config snapshot only when a DEX's config changes", async () => {
   const store = new Store(":memory:");
   const first = await loadUniverse(fixtureInfo(), { withLimits: true, now: () => 1 });
-  assert.deepEqual(store.saveUniverse(first), ["", "xyz", "flx", "para"]);
+  assert.deepEqual(store.saveUniverse(first).map((c) => c.dex), ["", "xyz", "flx", "para"]);
   const again = await loadUniverse(fixtureInfo(), { withLimits: true, now: () => 2 });
-  assert.deepEqual(store.saveUniverse(again), []);
+  assert.deepEqual(store.saveUniverse(again).map((c) => c.dex), []);
   const edited = await loadUniverse(
     fixtureInfo((type, dex, body) => {
       if (type !== "metaAndAssetCtxs" || dex !== "para") return body;
@@ -81,7 +81,9 @@ test("stores a config snapshot only when a DEX's config changes", async () => {
     }),
     { withLimits: true, now: () => 3 },
   );
-  assert.deepEqual(store.saveUniverse(edited), ["para"]);
+  const [update] = store.saveUniverse(edited);
+  assert.equal(update?.dex, "para");
+  assert.ok(update?.before && update.before !== update.after, "hands back the previous snapshot for diffing");
   const counts = store.db.prepare("SELECT dex, count(*) AS n FROM config_snapshots GROUP BY dex ORDER BY dex").all();
   assert.deepEqual(
     counts.map((r) => ({ ...r })),

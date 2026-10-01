@@ -3,8 +3,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { GRADES, type Grade } from "@telltale/detectors";
-import type { Board, BoardDex, BoardMarket, DexDetail, Health, HistoryPoint, MarketDetail } from "./api-types.ts";
+import type { AlertList, AlertView, Board, BoardDex, BoardMarket, DexDetail, Health, HistoryPoint, MarketDetail } from "./api-types.ts";
 import { scoreDatabase, type ScoredMarket, type Scorecard } from "./scoring.ts";
+import { toAlert } from "./store.ts";
 
 export interface ApiOptions {
   dbPath: string;
@@ -13,6 +14,8 @@ export interface ApiOptions {
   webRoot: string | null;
   /** Health reports not-ok when the newest data is older than this. */
   staleAfterSeconds?: number;
+  /** Show alerts on the site. Off during the shadow run, when they're only recorded. */
+  alertsPublic?: boolean;
   now?: () => number;
 }
 
@@ -69,7 +72,7 @@ export class Api {
   private board: Board | null = null;
 
   constructor(options: ApiOptions) {
-    this.options = { staleAfterSeconds: 180, now: Date.now, ...options, webRoot: options.webRoot ? resolve(options.webRoot) : null };
+    this.options = { staleAfterSeconds: 180, alertsPublic: false, now: Date.now, ...options, webRoot: options.webRoot ? resolve(options.webRoot) : null };
     this.db = new DatabaseSync(options.dbPath, { readOnly: true });
   }
 
@@ -106,7 +109,7 @@ export class Api {
       } catch {
         return this.send(res, 400, { error: "The URL isn't valid." });
       }
-      if (path.startsWith("/api/")) return this.api(path, res);
+      if (path.startsWith("/api/")) return this.api(path, url.searchParams, res);
       if (this.options.webRoot) return this.file(path, res);
       return this.send(res, 404, { error: "Not found." });
     } catch (err) {
@@ -114,8 +117,9 @@ export class Api {
     }
   };
 
-  private api(path: string, res: ServerResponse): void {
+  private api(path: string, query: URLSearchParams, res: ServerResponse): void {
     if (path === "/api/health") return this.send(res, 200, this.health(), "no-store");
+    if (path === "/api/alerts") return this.send(res, 200, this.alertList(query));
     if (!this.card || !this.board) return this.send(res, 503, { error: "The scorecard hasn't been computed yet." });
     if (path === "/api/board") return this.send(res, 200, this.board);
 
@@ -149,7 +153,42 @@ export class Api {
       latestMinute: latest,
       dataAgeSeconds: age,
       markets: this.card?.markets.length ?? 0,
+      alerts: this.options.alertsPublic,
     };
+  }
+
+  /** `?severity=warning` keeps warnings and worse; `coin`, `kind` and `limit` (up to 200) narrow it further. */
+  private alertList(query: URLSearchParams): AlertList {
+    if (!this.options.alertsPublic) return { public: false, alerts: [] };
+    const where: string[] = [];
+    const args: (string | number)[] = [];
+    if (query.get("severity") === "warning") where.push("severity IN ('warning', 'critical')");
+    else if (query.get("severity") === "critical") where.push("severity = 'critical'");
+    for (const field of ["coin", "kind"] as const) {
+      const v = query.get(field);
+      if (v) {
+        where.push(`${field} = ?`);
+        args.push(v);
+      }
+    }
+    const limit = Math.min(200, Math.max(1, Number(query.get("limit")) || 100));
+    return { public: true, alerts: this.alerts(where, args, limit) };
+  }
+
+  private alerts(where: string[], args: (string | number)[], limit: number): AlertView[] {
+    try {
+      const rows = this.db
+        .prepare(
+          `SELECT id, kind, coin, dex, severity, started_at AS startedAt, updated_at AS updatedAt, resolved_at AS resolvedAt, minutes,
+             title, detail, evidence, published_at AS publishedAt
+           FROM alerts ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY started_at DESC, id DESC LIMIT ?`,
+        )
+        .all(...args, limit);
+      return rows.map((r) => toAlert(r as Record<string, unknown>));
+    } catch {
+      // The collector creates the table; until it has, there's nothing to show.
+      return [];
+    }
   }
 
   private marketDetail(coin: string): MarketDetail | null {
@@ -179,6 +218,7 @@ export class Api {
       metrics: m.metrics,
       grade: m.grade,
       history,
+      alerts: this.options.alertsPublic ? this.alerts(["coin = ?"], [coin], 10) : [],
     };
   }
 

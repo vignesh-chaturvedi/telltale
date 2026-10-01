@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { Api } from "../src/api.ts";
-import type { Board, DexDetail, Health, MarketDetail } from "../src/api-types.ts";
+import type { AlertList, Board, DexDetail, Health, MarketDetail } from "../src/api-types.ts";
+import { Store } from "../src/store.ts";
 import { T, seededStore } from "./seed.ts";
 
 let dir: string;
@@ -19,6 +20,13 @@ before(async () => {
   dir = mkdtempSync(join(tmpdir(), "telltale-api-"));
   const store = await seededStore(join(dir, "t.db"));
   store.close();
+  const alerts = new Store(join(dir, "t.db"));
+  const alert = (coin: string, severity: "info" | "warning", at: number) =>
+    alerts.insertAlert({ kind: "mark-divergence", coin, dex: "", severity, startedAt: at, updatedAt: at, resolvedAt: null, minutes: 1, title: `${coin} ${severity}`, detail: "d", evidence: { gapBps: 300 }, publishedAt: null });
+  alert("BTC", "info", T);
+  alert("BTC", "warning", T + 60_000);
+  alert("ETH", "warning", T + 120_000);
+  alerts.close();
   const web = join(dir, "web");
   mkdirSync(join(web, "assets"), { recursive: true });
   writeFileSync(join(web, "index.html"), "<!doctype html><title>Telltale</title>");
@@ -122,4 +130,28 @@ test("refuses paths outside the website folder and non-GET methods", async () =>
   const post = await fetch(`${base}/api/board`, { method: "POST" });
   assert.equal(post.status, 405);
   assert.equal((await fetch(`${base}/api/markets/%E0%A4%A`)).status, 400);
+});
+
+test("alerts stay off the site until they're made public", async () => {
+  assert.deepEqual((await get<AlertList>("/api/alerts")).body, { public: false, alerts: [] });
+  assert.equal((await get<Health>("/api/health")).body.alerts, false);
+  assert.deepEqual((await get<MarketDetail>("/api/markets/BTC")).body.alerts, []);
+
+  const open = new Api({ dbPath: join(dir, "t.db"), windowMinutes: 30, webRoot: null, now: () => now, alertsPublic: true });
+  open.refresh();
+  const server2 = createServer(open.handle);
+  await new Promise<void>((resolve) => server2.listen(0, "127.0.0.1", resolve));
+  const base2 = `http://127.0.0.1:${(server2.address() as AddressInfo).port}`;
+  const list = async (q: string) => ((await (await fetch(`${base2}/api/alerts${q}`)).json()) as AlertList).alerts.map((a) => a.title);
+  try {
+    assert.deepEqual(await list(""), ["ETH warning", "BTC warning", "BTC info"], "newest first");
+    assert.deepEqual(await list("?severity=warning"), ["ETH warning", "BTC warning"]);
+    assert.deepEqual(await list("?coin=BTC&limit=1"), ["BTC warning"]);
+    const detail = (await (await fetch(`${base2}/api/markets/BTC`)).json()) as MarketDetail;
+    assert.deepEqual(detail.alerts.map((a) => a.title), ["BTC warning", "BTC info"]);
+    assert.deepEqual(detail.alerts[0]!.evidence, { gapBps: 300 });
+  } finally {
+    server2.close();
+    open.close();
+  }
 });

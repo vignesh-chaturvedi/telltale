@@ -1,6 +1,6 @@
 // Response shapes of the JSON API. Type-only, so the website can import them without pulling in
 // any server code.
-import type { DexSummary, Grade, MarketGrade, MarketMetrics, MetricKey } from "@telltale/detectors";
+import type { AlertKind, DexSummary, Grade, MarketGrade, MarketMetrics, MetricKey, Severity } from "@telltale/detectors";
 
 /** One market's row on the board: the grade plus the numbers the table shows. */
 export interface BoardMarket {
@@ -71,6 +71,8 @@ export interface MarketDetail {
   metrics: MarketMetrics;
   grade: MarketGrade;
   history: HistoryPoint[];
+  /** This market's latest alerts, newest first; empty until alerts are public. */
+  alerts: AlertView[];
 }
 
 export interface DexDetail {
@@ -86,4 +88,30 @@ export interface Health {
   latestMinute: number | null;
   dataAgeSeconds: number | null;
   markets: number;
+  /** Whether the site shows alerts yet (they're recorded privately during the shadow run). */
+  alerts: boolean;
+}
+
+export interface AlertView {
+  id: number;
+  kind: AlertKind;
+  /** `null` for alerts about a whole DEX. */
+  coin: string | null;
+  dex: string;
+  severity: Severity;
+  startedAt: number;
+  updatedAt: number;
+  /** `null` while the condition still holds. */
+  resolvedAt: number | null;
+  minutes: number;
+  title: string;
+  detail: string;
+  evidence: Record<string, number | string | null>;
+  /** When it was sent to the alert channels, if it was. */
+  publishedAt: number | null;
+}
+
+export interface AlertList {
+  public: boolean;
+  alerts: AlertView[];
 }

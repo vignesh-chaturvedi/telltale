@@ -10,10 +10,13 @@ import {
   type Trade,
   type WsMessage,
 } from "@telltale/hl";
-import { MINUTE, MinuteAggregator, minuteOf } from "./bars.ts";
+import { ALERT_HISTORY_MINUTES } from "@telltale/detectors";
+import type { AlertSink } from "./alerts.ts";
+import { MINUTE, MinuteAggregator, minuteOf, type MinuteBar } from "./bars.ts";
 import { BOOK_SIG_FIGS, planSubscriptions, type SubscriptionPlan } from "./plan.ts";
 import { Store } from "./store.ts";
 import { decodeAllDexsCtxs, isLive, loadUniverse, marketSetChanged, type Universe } from "./universe.ts";
+import { Watch } from "./watch.ts";
 
 export interface CollectorOptions {
   network: Network;
@@ -28,6 +31,10 @@ export interface CollectorOptions {
   limitsEvery: number;
   /** Days of minute bars to keep; older ones are rolled into 15-minute bars. */
   keepMinuteDays: number;
+  /** Where warnings and critical alerts go, when `publishAlerts` is on. */
+  sinks: readonly AlertSink[];
+  /** Off for the shadow run: alerts are recorded but not sent. */
+  publishAlerts: boolean;
   log: (line: string) => void;
 }
 
@@ -44,6 +51,8 @@ export const DEFAULTS = {
   universeEveryMs: 60_000,
   limitsEvery: 5,
   keepMinuteDays: 14,
+  sinks: [],
+  publishAlerts: false,
 } satisfies Partial<CollectorOptions>;
 
 /** Streams every live Hyperliquid market into minute bars in SQLite. */
@@ -53,6 +62,7 @@ export class Collector {
   private readonly limiter: TokenBucket;
   private readonly agg = new MinuteAggregator();
   private readonly store: Store;
+  private readonly watch: Watch;
   private pool: WsPool | null = null;
   private universe: Universe | null = null;
   private plan: SubscriptionPlan | null = null;
@@ -70,6 +80,7 @@ export class Collector {
     this.limiter = new TokenBucket({ perMinute: options.restWeightPerMinute });
     this.info = new InfoClient({ url: options.network.api, limiter: this.limiter });
     this.store = new Store(options.dbPath);
+    this.watch = new Watch({ alerts: this.store, sinks: options.sinks, publish: options.publishAlerts, log: options.log });
   }
 
   async start(): Promise<void> {
@@ -81,6 +92,9 @@ export class Collector {
     this.dexOf = this.universe.order;
     this.live = new Set(this.universe.markets.filter(isLive).map((m) => m.coin));
     this.plan = planSubscriptions(this.universe, { bookStreams: this.options.bookStreams });
+    this.watchMarkets(this.universe);
+    // Detectors look back up to 45 minutes; start from what's stored rather than from nothing.
+    this.watch.addBars(this.store.recentBars(ALERT_HISTORY_MINUTES));
 
     this.pool = new WsPool({
       url: network.ws,
@@ -94,7 +108,8 @@ export class Collector {
     log(
       `${network.name}: ${this.universe.dexes.length} DEXs, ${live} live markets. ` +
         `Streaming contexts for ${this.plan.ctxStreamed.length}, books for ${this.plan.bookStreamed.length}; ` +
-        `polling ${this.plan.bookPolled.length} books. ${this.plan.subscriptions.length} subscriptions.`,
+        `polling ${this.plan.bookPolled.length} books. ${this.plan.subscriptions.length} subscriptions. ` +
+        `Alerts ${this.options.publishAlerts ? `sent to ${this.options.sinks.map((s) => s.name).join(" and ") || "no channel"}` : "recorded only (shadow run)"}.`,
     );
 
     this.every("universe", this.options.universeEveryMs, () => this.refreshUniverse());
@@ -129,9 +144,11 @@ export class Collector {
       }
       case "l2Book":
         this.agg.onBook(msg.data as L2Book, at, "stream");
+        this.watch.onBook(msg.data as L2Book, at);
         break;
       case "trades":
         this.agg.onTrades(msg.data as Trade[], at);
+        this.watch.onTrades(msg.data as Trade[]);
         break;
     }
   }
@@ -149,8 +166,10 @@ export class Collector {
     this.live = new Set(next.markets.filter(isLive).map((m) => m.coin));
     for (const [coin, ctx] of next.ctxs) if (this.live.has(coin)) this.agg.onAssetCtx(coin, ctx, at, "rest");
     const changed = this.store.saveUniverse(next);
-    if (changed.length) this.options.log(`config changed: ${changed.map((d) => d || "core").join(", ")}`);
+    if (changed.length) this.options.log(`config changed: ${changed.map((c) => c.dex || "core").join(", ")}`);
+    this.watch.onConfigUpdates(changed, at);
     this.universe = next;
+    this.watchMarkets(next);
 
     if (marketSetChanged(previous, next)) {
       const plan = planSubscriptions(next, { bookStreams: this.options.bookStreams });
@@ -174,7 +193,10 @@ export class Collector {
       const coin = coins[this.pollIndex++ % coins.length]!;
       try {
         const book = await this.info.l2Book(coin, BOOK_SIG_FIGS);
-        if (book?.levels) this.agg.onBook(book, Date.now(), "rest");
+        if (book?.levels) {
+          this.agg.onBook(book, Date.now(), "rest");
+          this.watch.onBook(book, Date.now());
+        }
       } catch (err) {
         this.options.log(`warn: l2Book ${coin}: ${(err as Error).message}`);
       }
@@ -201,6 +223,7 @@ export class Collector {
     const bars = this.agg.flush(before);
     if (bars.length === 0) return;
     this.store.writeBars(bars);
+    this.checkAlerts(bars);
     const stats = this.pool!.stats();
     const received = stats.received - this.lastStats.received;
     const restWeight = this.limiter.taken - this.lastStats.restWeight;
@@ -225,6 +248,24 @@ export class Collector {
         ` | ws ${stats.open}/${stats.connections} subs ${stats.subscriptions} msgs ${received} | rest ${restWeight}/min` +
         ` | db ${(health.dbBytes / 1e6).toFixed(1)} MB`,
     );
+  }
+
+  private watchMarkets(universe: Universe): void {
+    this.watch.setMarkets(universe.markets.filter(isLive).map(({ coin, dex, oiCapUsd }) => ({ coin, dex, oiCapUsd })));
+  }
+
+  /** Runs the minute detectors on the bars just written, a minute at a time, and stores wall events. */
+  private checkAlerts(bars: readonly MinuteBar[]): void {
+    try {
+      for (const ts of [...new Set(bars.map((b) => b.ts))].sort((a, b) => a - b)) {
+        this.watch.addBars(bars.filter((b) => b.ts === ts));
+        this.watch.checkMinute(ts);
+      }
+      this.store.writeBookEvents(this.watch.takeBookEvents());
+    } catch (err) {
+      // Alerts must never stop data collection.
+      this.options.log(`error: alerts: ${(err as Error).stack ?? (err as Error).message}`);
+    }
   }
 
   /** Keeps disk use flat: minute bars past the retention window become 15-minute bars. */

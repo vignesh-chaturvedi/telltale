@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router";
 import { ThemeToggle } from "./components/ThemeToggle.tsx";
+import { useApi, type Health } from "./lib/api.ts";
+import { Alerts } from "./pages/Alerts.tsx";
 import { Board } from "./pages/Board.tsx";
 import { Dex } from "./pages/Dex.tsx";
 import { Market } from "./pages/Market.tsx";
@@ -34,6 +36,8 @@ function ScrollToTop() {
 }
 
 export function App() {
+  // Alerts are recorded privately during the shadow run; the link appears once they're public.
+  const alertsPublic = useApi<Health>("/api/health").data?.alerts ?? false;
   return (
     <div className="flex min-h-dvh flex-col">
       <ScrollToTop />
@@ -41,19 +45,27 @@ export function App() {
         Skip to content
       </a>
       <header className="border-b">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2 sm:px-6">
-          <Link to="/" className="-ml-2 inline-flex min-h-10 items-center gap-2 rounded-md px-2 font-semibold tracking-tight">
+        {/* Phones: logo and theme toggle on one row, the links below. Wider: one row. */}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 px-4 py-2 sm:flex-nowrap sm:px-6">
+          <Link to="/" className="-ml-2 mr-auto inline-flex min-h-10 items-center gap-2 rounded-md px-2 font-semibold tracking-tight">
             <Logo />
             Telltale
           </Link>
-          <nav aria-label="Main" className="flex items-center gap-1">
+          <div className="sm:order-last">
+            <ThemeToggle />
+          </div>
+          <nav aria-label="Main" className="-ml-3 flex w-full items-center gap-1 sm:ml-0 sm:w-auto">
             <NavLink to="/" end className={navClass}>
               Markets
             </NavLink>
+            {alertsPublic && (
+              <NavLink to="/alerts" className={navClass}>
+                Alerts
+              </NavLink>
+            )}
             <NavLink to="/methodology" className={navClass}>
               Methodology
             </NavLink>
-            <ThemeToggle />
           </nav>
         </div>
       </header>
@@ -63,6 +75,7 @@ export function App() {
           <Route path="/" element={<Board />} />
           <Route path="/markets/:coin" element={<Market />} />
           <Route path="/dexes/:slug" element={<Dex />} />
+          <Route path="/alerts" element={<Alerts />} />
           <Route path="/methodology" element={<Methodology />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

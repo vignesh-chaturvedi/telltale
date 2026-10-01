@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type { Board, BoardDex, BoardMarket, DexDetail, HistoryPoint, MarketDetail } from "@telltale/collector/api-types";
+export type { AlertList, AlertView, Board, BoardDex, BoardMarket, DexDetail, Health, HistoryPoint, MarketDetail } from "@telltale/collector/api-types";
 
 /** The API recomputes grades once a minute, so polling faster gains nothing. */
 export const REFRESH_MS = 60_000;

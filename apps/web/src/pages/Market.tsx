@@ -1,6 +1,7 @@
 import { Info } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
+import { AlertItem } from "../components/AlertItem.tsx";
 import { Freshness } from "../components/Freshness.tsx";
 import { GradeBadge } from "../components/GradeBadge.tsx";
 import { LineChart } from "../components/LineChart.tsx";
@@ -124,6 +125,27 @@ function MarketBody({ market, receivedAt }: { market: MarketDetail; receivedAt: 
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {market.alerts.length > 0 && (
+        <section aria-labelledby="alerts-title" className="space-y-4">
+          <div>
+            <h2 id="alerts-title" className="text-lg font-semibold">
+              Alerts
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              This market's latest alerts.{" "}
+              <Link to="/alerts" className="link">
+                All alerts
+              </Link>
+            </p>
+          </div>
+          <div className="rounded-lg border bg-card">
+            {market.alerts.map((a) => (
+              <AlertItem key={a.id} alert={a} showMarket={false} />
+            ))}
+          </div>
         </section>
       )}
 

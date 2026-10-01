@@ -41,7 +41,8 @@ export interface Scorecard {
   markets: ScoredMarket[];
 }
 
-const BAR_COLUMNS = `ts, oracle_px AS oraclePx, mark_px AS markPx, mid_px AS midPx, open_interest AS openInterest,
+/** Minute-bar columns under the names the detectors use. */
+export const BAR_COLUMNS = `ts, oracle_px AS oraclePx, mark_px AS markPx, mid_px AS midPx, open_interest AS openInterest,
   day_ntl_vlm AS dayNtlVlm, spread_bps AS spreadBps, oracle_changes AS oracleChanges, oracle_max_gap_ms AS oracleMaxGapMs,
   bid_depth_1 AS bidDepth1, ask_depth_1 AS askDepth1, bid_depth_2 AS bidDepth2, ask_depth_2 AS askDepth2,
   bid_depth_5 AS bidDepth5, ask_depth_5 AS askDepth5, min_depth_2 AS minDepth2, reach_pct AS reachPct`;

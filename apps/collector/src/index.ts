@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { MAINNET, TESTNET } from "@telltale/hl";
 import { Collector, DEFAULTS } from "./collector.ts";
+import { sinksFromEnv } from "./notify.ts";
 
 const { values } = parseArgs({
   options: {
@@ -21,6 +22,9 @@ const collector = new Collector({
   dbPath: values.db,
   bookStreams: Number(values["book-streams"]),
   keepMinuteDays: Number(values["keep-days"]),
+  sinks: sinksFromEnv(),
+  // Alerts are only sent once ALERTS_PUBLISH=1 is set, after the shadow run.
+  publishAlerts: process.env.ALERTS_PUBLISH === "1",
   log,
 });
 

@@ -2,7 +2,7 @@
 
 Live safety ratings for every market on Hyperliquid.
 
-Telltale grades every live Hyperliquid perpetual market, core and HIP-3, from A (Strong) to E (Fragile) on published metrics: order-book depth against open interest, the cost to move the price to liquidation levels, the gap between the market and its oracle, agreement between deployers listing the same asset, and 50%+ daily moves. Every grade comes with the numbers behind it. Alerts for markets that start to look like past manipulation incidents are in progress.
+Telltale grades every live Hyperliquid perpetual market, core and HIP-3, from A (Strong) to E (Fragile) on published metrics: order-book depth against open interest, the cost to move the price to liquidation levels, the gap between the market and its oracle, agreement between deployers listing the same asset, and 50%+ daily moves. Every grade comes with the numbers behind it. Alerts report, as they happen, the conditions behind past losses on Hyperliquid: the mark price pulling away from the oracle, an oracle frozen while its market moves, order books thinning out, walls pulled before the price reaches them, and deployer changes.
 
 Status: in development for the Hyperliquid track of Colosseum's Crypto World's Fair (Sep 14 – Oct 12, 2026).
 
@@ -41,6 +41,24 @@ pnpm score --json               # the full scorecard, for other tools
 
 Each market gets a grade from A (Strong) to E (Fragile), built from depth against open interest, the cost to move the price to liquidation levels, the gap between the mid price and the oracle, agreement with other deployers of the same ticker, and 50%+ daily moves. [docs/methodology.md](docs/methodology.md) defines every metric and threshold, and lists what the grades can't tell you.
 
+## Alerts
+
+The collector checks every market each minute, and every streamed order book as it arrives. [docs/methodology.md](docs/methodology.md#alerts) lists each alert and its thresholds.
+
+```bash
+pnpm alerts                   # alerts recorded in the last 24 hours (--hours 72, --all for information too)
+pnpm alerts --replay          # run the detectors over the stored minutes and count what they'd raise
+```
+
+Alerts are always recorded. Two switches in the environment (`.env`, or `/etc/telltale.env` on the server) control the rest:
+
+| Variable | Effect |
+|---|---|
+| `ALERTS_PUBLISH=1` | Send warnings and critical alerts to the channels below (off during the shadow run) |
+| `ALERTS_PUBLIC=1` | Show alerts on the website and in the API |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Post to a Telegram channel |
+| `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_SECRET` | POST each alert as JSON, signed with `X-Telltale-Signature: sha256=…` when a secret is set |
+
 ## Website and API
 
 ```bash
@@ -56,6 +74,7 @@ The API recomputes every grade once a minute:
 | `GET /api/board` | Every market and DEX with its grade, reasons and key numbers |
 | `GET /api/markets/:coin` | One market's metrics, grade breakdown and the last 24 hours in 5-minute steps |
 | `GET /api/dexes/:slug` | One DEX and its markets (`core` for Hyperliquid's own) |
+| `GET /api/alerts` | The latest alerts, newest first; `?severity=warning`, `coin`, `kind` and `limit` narrow it |
 | `GET /api/health` | Age of the newest data; `ok` is false once it's over 3 minutes old |
 
 ## Deploying

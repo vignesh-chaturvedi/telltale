@@ -1,4 +1,5 @@
 import type { MarketMetrics } from "./metrics.ts";
+import { pct, usd } from "./text.ts";
 
 export type Grade = "A" | "B" | "C" | "D" | "E";
 export const GRADES: readonly Grade[] = ["A", "B", "C", "D", "E"];
@@ -20,10 +21,6 @@ export interface Rule {
   /** One sentence with the numbers behind the grade. */
   describe: (m: MarketMetrics) => string;
 }
-
-const usd = (n: number): string =>
-  n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n.toFixed(0)}`;
-const pct = (share: number): string => `${(share * 100).toFixed(share < 0.1 ? 1 : 0)}%`;
 
 /** The graded metrics, their weights and band limits. docs/methodology.md explains each one. */
 export const RULES: readonly Rule[] = [

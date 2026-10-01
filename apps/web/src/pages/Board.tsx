@@ -1,13 +1,14 @@
 import { Search, X } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router";
+import { AlertItem } from "../components/AlertItem.tsx";
 import { Freshness } from "../components/Freshness.tsx";
 import { GradeBadge } from "../components/GradeBadge.tsx";
 import { GradeBar } from "../components/GradeBar.tsx";
 import { MarketTable } from "../components/MarketTable.tsx";
 import { Num } from "../components/Num.tsx";
 import { EmptyState, ErrorState, Loading, Skeleton } from "../components/States.tsx";
-import { dexPath, useApi, type Board as BoardData, type BoardDex, type BoardMarket } from "../lib/api.ts";
+import { dexPath, useApi, type AlertList, type Board as BoardData, type BoardDex, type BoardMarket } from "../lib/api.ts";
 import { count, usd } from "../lib/format.ts";
 import { GRADE_BADGE, GRADE_NAMES, GRADES, type Grade } from "../lib/grades.ts";
 
@@ -38,6 +39,7 @@ export function Board() {
       {data && (
         <>
           <Summary board={data} />
+          <LatestAlerts />
           <Dexes dexes={data.dexes} />
           <Markets board={data} />
         </>
@@ -112,6 +114,29 @@ function Summary({ board }: { board: BoardData }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/** The latest warnings, once alerts are public; nothing at all before then. */
+function LatestAlerts() {
+  const { data } = useApi<AlertList>("/api/alerts?severity=warning&limit=3");
+  if (!data?.public || data.alerts.length === 0) return null;
+  return (
+    <section aria-labelledby="latest-alerts-title" className="space-y-4">
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 id="latest-alerts-title" className="text-lg font-semibold">
+          Latest alerts
+        </h2>
+        <Link to="/alerts" className="link text-sm">
+          All alerts
+        </Link>
+      </div>
+      <div className="rounded-lg border bg-card">
+        {data.alerts.map((a) => (
+          <AlertItem key={a.id} alert={a} />
+        ))}
+      </div>
     </section>
   );
 }
