@@ -19,6 +19,9 @@ import { deployerChangeSignal, diffDexConfig } from "./config-diff.ts";
 import { tickerOf } from "./scoring.ts";
 import type { AlertStore, ConfigUpdate } from "./store.ts";
 
+/** Walls smaller than this aren't stored: on the first live day every wall would have added about 50 MB a day. */
+export const BOOK_EVENT_MIN_USD = 100_000;
+
 export interface WatchedMarket {
   coin: string;
   dex: string;
@@ -97,7 +100,8 @@ export class Watch {
     const m = this.markets.get(book.coin);
     if (!m || !book.levels) return;
     for (const e of this.walls.onBook(book.coin, toLevels(book.levels[0]), toLevels(book.levels[1]), at)) {
-      this.bookEvents.push(e);
+      // Large levels come and go constantly; keep how the bigger walls ended, as evidence.
+      if (e.kind !== "appeared" && e.peakUsd >= BOOK_EVENT_MIN_USD) this.bookEvents.push(e);
       const s = pulledWallSignal(e, m.dex);
       if (s) this.engine.onEvent(s);
     }

@@ -65,7 +65,7 @@ test("markets without a bar for the minute aren't checked, and unknown markets a
   assert.equal(store.alerts.length, 1);
 });
 
-test("order books feed the wall tracker, and a pulled wall becomes an event alert", () => {
+test("order books feed the wall tracker; only how the bigger walls ended is kept", () => {
   const { store, watch } = setup();
   const book = (wall: boolean, at: number): L2Book => ({
     coin: "BTC",
@@ -75,12 +75,12 @@ test("order books feed the wall tracker, and a pulled wall becomes an event aler
       Array.from({ length: 20 }, (_, i) => ({ px: String(100.05 + i * 0.1), sz: String(20_000 / (100.05 + i * 0.1)), n: 1 })),
     ],
   });
-  for (const [i, wall] of [true, true, true, false].entries()) watch.onBook(book(wall, T + i * 5_000), T + i * 5_000);
-  assert.deepEqual(watch.takeBookEvents().map((e) => e.kind), ["appeared", "pulled"]);
+  const walls = [true, true, true, false, false, false, false, false];
+  for (const [i, wall] of walls.entries()) watch.onBook(book(wall, T + i * 5_000), T + i * 5_000);
+  const kept = watch.takeBookEvents();
+  assert.deepEqual(kept.map((e) => `${e.kind} ${e.peakUsd}`), ["pulled 420000"], "appearances aren't stored");
   assert.deepEqual(watch.takeBookEvents(), [], "handed over once");
-  assert.equal(store.alerts.length, 1);
-  assert.equal(store.alerts[0]!.kind, "pulled-wall");
-  assert.equal(store.alerts[0]!.resolvedAt, T + 15_000);
+  assert.equal(store.alerts.length, 0, "no alert without the market's usual wall size to compare against");
 });
 
 test("config updates are diffed against the previous snapshot; a DEX's first snapshot isn't a change", () => {

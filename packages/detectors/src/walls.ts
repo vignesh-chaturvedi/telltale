@@ -2,6 +2,11 @@
 // how each one ended. A wall that disappears within minutes, mostly unfilled and before the price
 // reaches it, is the pattern seen before the POPCAT loss in November 2025.
 //
+// Large levels come and go all the time: market makers re-quote as the price moves, and on the
+// first live day about two thirds of vanished walls reappeared within 1% seconds later. So a wall
+// counts as pulled only if it isn't replaced nearby, and an alert needs it to be far larger than
+// the market's usual walls.
+//
 // It works on grouped books (prices bucketed to 3 significant figures), so a "level" is a price
 // bucket and one wall may be several orders. Everything here is a pure function of the snapshots
 // and trades fed in, in time order.
@@ -29,9 +34,15 @@ export interface WallRules {
   maxFilledShare: number;
   /** A level shrinking below this share of its peak counts as removed. */
   goneShare: number;
-  /** Pulled walls at least this large and this share of their side are warnings; smaller ones are information. */
-  warning: { usd: number; shareOfDepth: number };
-  critical: { usd: number; shareOfDepth: number };
+  /** A similar wall (at least `share` of the size, within `pct`% of the price) appearing this close in time means it moved. */
+  moved: { withinMs: number; pct: number; share: number };
+  /** A market's usual wall: the median of its walls that ended in this window, once there are enough. */
+  typical: { windowMs: number; minSamples: number };
+  /** A pulled wall is an alert only when it stood at least this long... */
+  minLifetimeMs: number;
+  /** ...and is this large: in USD, as a share of its side within ±2%, and against the market's usual wall. */
+  warning: { usd: number; shareOfDepth: number; vsTypical: number };
+  critical: { usd: number; shareOfDepth: number; vsTypical: number };
 }
 
 export const DEFAULT_WALL_RULES: WallRules = {
@@ -43,11 +54,15 @@ export const DEFAULT_WALL_RULES: WallRules = {
   maxLifetimeMs: 10 * 60_000,
   maxFilledShare: 0.1,
   goneShare: 0.2,
-  warning: { usd: 250_000, shareOfDepth: 0.25 },
-  critical: { usd: 2_000_000, shareOfDepth: 0.5 },
+  moved: { withinMs: 15_000, pct: 1, share: 0.5 },
+  typical: { windowMs: 2 * 60 * 60_000, minSamples: 10 },
+  minLifetimeMs: 30_000,
+  // Two thirds of the side means the wall is at least twice everything else resting within ±2%.
+  warning: { usd: 250_000, shareOfDepth: 2 / 3, vsTypical: 3 },
+  critical: { usd: 2_000_000, shareOfDepth: 0.8, vsTypical: 3 },
 };
 
-export type WallEnd = "pulled" | "filled" | "expired";
+export type WallEnd = "pulled" | "moved" | "filled" | "expired";
 
 export interface WallEvent {
   kind: "appeared" | WallEnd;
@@ -57,12 +72,16 @@ export interface WallEvent {
   /** When this event was seen. */
   at: number;
   firstSeen: number;
+  /** When the wall was last seen standing. */
+  lastSeen: number;
   peakUsd: number;
   /** The side's USD within ±2% of mid when the wall was at its largest. */
   sideDepthUsd: number;
   /** Traded notional at the wall's price while it stood. */
   filledUsd: number;
   snapshots: number;
+  /** The market's usual wall when this one ended, or `null` without enough history. */
+  typicalUsd: number | null;
 }
 
 interface Wall {
@@ -78,6 +97,14 @@ interface Wall {
   snapshots: number;
 }
 
+interface Market {
+  walls: Map<string, Wall>;
+  /** Walls that vanished unfilled, waiting to see whether they reappear nearby. */
+  pending: { wall: Wall; at: number }[];
+  /** Recently ended walls, for the market's usual size. */
+  ended: { at: number; peakUsd: number }[];
+}
+
 const key = (side: Side, px: number) => `${side}@${px}`;
 
 function bucketStep(levels: readonly Level[]): number {
@@ -86,7 +113,7 @@ function bucketStep(levels: readonly Level[]): number {
 }
 
 export class WallTracker {
-  private readonly walls = new Map<string, Map<string, Wall>>();
+  private readonly markets = new Map<string, Market>();
   private readonly rules: WallRules;
 
   constructor(rules: WallRules = DEFAULT_WALL_RULES) {
@@ -97,8 +124,8 @@ export class WallTracker {
   onBook(coin: string, bids: readonly Level[], asks: readonly Level[], at: number): WallEvent[] {
     const s = summarizeBook(bids, asks);
     if (s.mid === null) return [];
-    let tracked = this.walls.get(coin);
-    if (!tracked) this.walls.set(coin, (tracked = new Map()));
+    let m = this.markets.get(coin);
+    if (!m) this.markets.set(coin, (m = { walls: new Map(), pending: [], ended: [] }));
     const events: WallEvent[] = [];
     for (const side of ["bid", "ask"] as const) {
       const levels = side === "bid" ? bids : asks;
@@ -106,7 +133,7 @@ export class WallTracker {
       const here = new Map(levels.map((l) => [l.px, l.px * l.sz]));
       const deepest = levels.at(-1)!.px;
 
-      for (const [k, wall] of tracked) {
+      for (const [k, wall] of m.walls) {
         if (wall.side !== side) continue;
         const now = here.get(wall.px) ?? 0;
         if (now >= this.rules.goneShare * wall.peakUsd) {
@@ -116,14 +143,18 @@ export class WallTracker {
             wall.peakUsd = now;
             wall.sideDepthUsd = depth;
           }
-          if (wall.snapshots === this.rules.minSnapshots) events.push(this.event("appeared", coin, wall, at));
+          if (wall.snapshots === this.rules.minSnapshots) events.push(this.event("appeared", coin, wall, at, null));
           continue;
         }
-        tracked.delete(k);
+        m.walls.delete(k);
         // Too brief to count, or it scrolled out of the visible book as the price moved away.
         if (wall.snapshots < this.rules.minSnapshots) continue;
         if (side === "bid" ? wall.px < deepest : wall.px > deepest) continue;
-        events.push(this.event(this.ending(wall, s.bestBid!, s.bestAsk!, at), coin, wall, at));
+        const end = this.ending(wall, s.bestBid!, s.bestAsk!, at);
+        if (end !== "pulled") events.push(this.finish(end, coin, m, wall, at));
+        // A similar wall that went up just before this one came down: the quote was moved.
+        else if (this.replacement(m, wall, at)) events.push(this.finish("moved", coin, m, wall, at));
+        else m.pending.push({ wall, at });
       }
 
       const typical = median(levels.map((l) => l.px * l.sz)) ?? 0;
@@ -134,27 +165,45 @@ export class WallTracker {
         if (value < this.rules.minUsd || distance > this.rules.maxDistancePct) continue;
         if (value < this.rules.sizeVsTypical * typical && value < this.rules.shareOfDepth * depth) continue;
         const k = key(side, l.px);
-        if (tracked.has(k)) continue;
-        tracked.set(k, { side, px: l.px, step, firstSeen: at, lastSeen: at, peakUsd: value, sideDepthUsd: depth, filledUsd: 0, snapshots: 1 });
-        if (this.rules.minSnapshots <= 1) events.push(this.event("appeared", coin, tracked.get(k)!, at));
+        if (m.walls.has(k)) continue;
+        m.walls.set(k, { side, px: l.px, step, firstSeen: at, lastSeen: at, peakUsd: value, sideDepthUsd: depth, filledUsd: 0, snapshots: 1 });
+        if (this.rules.minSnapshots <= 1) events.push(this.event("appeared", coin, m.walls.get(k)!, at, null));
       }
     }
+
+    // Settle vanished walls: moved if a similar one has gone up nearby, pulled once the wait is over.
+    m.pending = m.pending.filter(({ wall, at: gone }) => {
+      if (this.replacement(m, wall, gone)) events.push(this.finish("moved", coin, m, wall, at));
+      else if (at - gone >= this.rules.moved.withinMs) events.push(this.finish("pulled", coin, m, wall, gone));
+      else return true;
+      return false;
+    });
     return events;
   }
 
   /** Feeds one trade. `aggressor` is "B" when a buyer lifted asks and "A" when a seller hit bids. */
   onTrade(coin: string, aggressor: "B" | "A", px: number, notional: number): void {
-    const tracked = this.walls.get(coin);
-    if (!tracked) return;
+    const m = this.markets.get(coin);
+    if (!m) return;
     const side: Side = aggressor === "B" ? "ask" : "bid";
-    for (const wall of tracked.values()) {
+    for (const wall of m.walls.values()) {
       if (wall.side === side && Math.abs(px - wall.px) <= Math.max(wall.step, wall.px * 1e-9)) wall.filledUsd += notional;
     }
   }
 
   /** Drops a market's state, e.g. when it stops being streamed. */
   forget(coin: string): void {
-    this.walls.delete(coin);
+    this.markets.delete(coin);
+  }
+
+  /** A wall on the same side, near the price and of similar size, that went up around when this one came down. */
+  private replacement(m: Market, gone: Wall, at: number): boolean {
+    const r = this.rules.moved;
+    for (const w of m.walls.values()) {
+      if (w === gone || w.side !== gone.side || Math.abs(w.firstSeen - at) > r.withinMs) continue;
+      if ((Math.abs(w.px - gone.px) / gone.px) * 100 <= r.pct && w.peakUsd >= r.share * gone.peakUsd) return true;
+    }
+    return false;
   }
 
   private ending(wall: Wall, bestBid: number, bestAsk: number, at: number): WallEnd {
@@ -165,7 +214,16 @@ export class WallTracker {
     return at - wall.firstSeen <= this.rules.maxLifetimeMs ? "pulled" : "expired";
   }
 
-  private event(kind: WallEvent["kind"], coin: string, wall: Wall, at: number): WallEvent {
+  /** Records an ended wall for the market's usual size, and reports it against what came before. */
+  private finish(kind: WallEnd, coin: string, m: Market, wall: Wall, at: number): WallEvent {
+    const { windowMs, minSamples } = this.rules.typical;
+    m.ended = m.ended.filter((e) => at - e.at <= windowMs);
+    const typical = m.ended.length >= minSamples ? median(m.ended.map((e) => e.peakUsd)) : null;
+    m.ended.push({ at, peakUsd: wall.peakUsd });
+    return this.event(kind, coin, wall, at, typical);
+  }
+
+  private event(kind: WallEvent["kind"], coin: string, wall: Wall, at: number, typicalUsd: number | null): WallEvent {
     return {
       kind,
       coin,
@@ -173,21 +231,29 @@ export class WallTracker {
       px: wall.px,
       at,
       firstSeen: wall.firstSeen,
+      lastSeen: wall.lastSeen,
       peakUsd: Math.round(wall.peakUsd),
       sideDepthUsd: Math.round(wall.sideDepthUsd),
       filledUsd: Math.round(wall.filledUsd),
       snapshots: wall.snapshots,
+      typicalUsd: typicalUsd === null ? null : Math.round(typicalUsd),
     };
   }
 }
 
-/** The alert for a pulled wall, or `null` for other events. */
+/**
+ * The alert for a pulled wall, or `null`. Only exceptional walls qualify: large, most of their
+ * side of the book, several times the market's usual wall, and standing long enough to matter.
+ */
 export function pulledWallSignal(e: WallEvent, dex: string, rules: WallRules = DEFAULT_WALL_RULES): Signal | null {
-  if (e.kind !== "pulled") return null;
-  const share = e.sideDepthUsd > 0 ? e.peakUsd / e.sideDepthUsd : 1;
-  const meets = (t: { usd: number; shareOfDepth: number }) => e.peakUsd >= t.usd && share >= t.shareOfDepth;
-  const severity = meets(rules.critical) ? "critical" : meets(rules.warning) ? "warning" : "info";
+  if (e.kind !== "pulled" || e.typicalUsd === null || e.typicalUsd <= 0) return null;
   const lifetime = e.at - e.firstSeen;
+  if (lifetime < rules.minLifetimeMs) return null;
+  const share = e.sideDepthUsd > 0 ? e.peakUsd / e.sideDepthUsd : 1;
+  const times = e.peakUsd / e.typicalUsd;
+  const meets = (t: { usd: number; shareOfDepth: number; vsTypical: number }) => e.peakUsd >= t.usd && share >= t.shareOfDepth && times >= t.vsTypical;
+  const severity = meets(rules.critical) ? "critical" : meets(rules.warning) ? "warning" : null;
+  if (!severity) return null;
   return {
     kind: "pulled-wall",
     coin: e.coin,
@@ -196,8 +262,17 @@ export function pulledWallSignal(e: WallEvent, dex: string, rules: WallRules = D
     at: e.at,
     title: `A ${usd(e.peakUsd)} ${e.side} wall was pulled after ${duration(lifetime)}`,
     detail:
-      `A ${e.side} of ${usd(e.peakUsd)} at ${price(e.px)}, ${pct(Math.min(share, 1))} of the ${e.side} side within ±2% of mid, ` +
-      `was removed after ${duration(lifetime)} with ${usd(e.filledUsd)} filled, before the price reached it.`,
-    evidence: { side: e.side, px: e.px, peakUsd: e.peakUsd, sideDepthUsd: e.sideDepthUsd, filledUsd: e.filledUsd, lifetimeMs: lifetime },
+      `A ${e.side} of ${usd(e.peakUsd)} at ${price(e.px)}, ${pct(Math.min(share, 1))} of the ${e.side} side within ±2% of mid and ` +
+      `${times.toFixed(0)}× this market's usual large order, was removed after ${duration(lifetime)} with ${usd(e.filledUsd)} filled, ` +
+      `before the price reached it.`,
+    evidence: {
+      side: e.side,
+      px: e.px,
+      peakUsd: e.peakUsd,
+      sideDepthUsd: e.sideDepthUsd,
+      typicalUsd: e.typicalUsd,
+      filledUsd: e.filledUsd,
+      lifetimeMs: lifetime,
+    },
   };
 }
