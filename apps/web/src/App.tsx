@@ -11,13 +11,17 @@ import { NotFound } from "./pages/NotFound.tsx";
 
 const REPO = "https://github.com/vignesh-chaturvedi/telltale";
 
+/**
+ * The telltale ribbons, the same dark tile as the favicon and the social profile photos in both
+ * themes. The colors are the brand's fixed values (brand/logo.svg), not theme tokens.
+ */
 function Logo() {
   return (
-    <svg viewBox="0 0 32 32" aria-hidden="true" className="size-6">
-      <rect width="32" height="32" rx="7" className="fill-card stroke-border" />
-      <rect x="8" y="15" width="4" height="10" rx="1" className="fill-primary" />
-      <rect x="14" y="10" width="4" height="15" rx="1" className="fill-primary" />
-      <rect x="20" y="6" width="4" height="19" rx="1" className="fill-primary" />
+    <svg viewBox="0 0 400 400" aria-hidden="true" className="size-7">
+      <rect width="400" height="400" rx="88" fill="#061415" />
+      <line x1="112" y1="96" x2="112" y2="304" stroke="#EBF4F4" strokeOpacity="0.55" strokeWidth="18" strokeLinecap="round" />
+      <path d="M112 162 C 152 142, 186 182, 228 166 C 256 156, 280 150, 302 154" fill="none" stroke="#00C5C6" strokeWidth="36" strokeLinecap="round" />
+      <path d="M112 238 C 148 220, 178 254, 214 242 C 238 234, 258 230, 276 233" fill="none" stroke="#76E2E2" strokeWidth="36" strokeLinecap="round" />
     </svg>
   );
 }

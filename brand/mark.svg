@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="86 70 240 260" role="img" aria-label="Telltale">
+  <!-- The mark alone, on a transparent background, for dark surfaces. -->
+  <line x1="112" y1="96" x2="112" y2="304" stroke="#EBF4F4" stroke-opacity="0.55" stroke-width="14" stroke-linecap="round"/>
+  <path d="M112 162 C 152 142, 186 182, 228 166 C 256 156, 280 150, 302 154" fill="none" stroke="#00C5C6" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M112 238 C 148 220, 178 254, 214 242 C 238 234, 258 230, 276 233" fill="none" stroke="#76E2E2" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

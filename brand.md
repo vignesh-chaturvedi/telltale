@@ -77,6 +77,15 @@ All pairs are computed from the actual colors (OKLCH → sRGB luminance) and pas
 | grade colors / card (weakest) | 5.1:1 ✓ | 6.0:1 ✓ |
 | grade colors / tinted badge (weakest) | 4.6:1 ✓ | 5.6:1 ✓ |
 
+## Logo — telltale ribbons
+
+A stay with two ribbons streaming from it. On a sail, telltales are the ribbons that show the wind before you feel it; Telltale shows how a market is behaving before it fails. Chosen October 1, 2026.
+
+- Always on the dark tile (`#061415`): the stay is `#EBF4F4` at 55% opacity, the upper ribbon `#00C5C6`, the lower `#76E2E2`. The tile and its colors stay the same in light and dark themes.
+- Files in `brand/`: `logo.svg` (the tile, the source for everything else), `mark.svg` (the mark alone, for dark surfaces), `telltale-avatar-x-400.png`, `telltale-avatar-telegram-640.png`, `telltale-avatar-1600.png`, and `telltale-header-x-1500x500.png`.
+- The website's favicon and header logo use the same drawing (`apps/web/public/favicon.svg`, `Logo` in `App.tsx`).
+- Social headers keep text out of the bottom-left quarter, where X places the profile photo.
+
 ## Typography — Inter + JetBrains Mono
 
 - **Display and body:** Inter (variable)
