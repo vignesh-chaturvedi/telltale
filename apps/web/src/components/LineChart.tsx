@@ -9,6 +9,12 @@ export interface Series {
   dashed?: boolean;
 }
 
+export interface Marker {
+  t: number;
+  label: string;
+  tone: "alert" | "event";
+}
+
 interface Props {
   title: string;
   /** One sentence for screen readers describing what the chart shows now. */
@@ -18,6 +24,8 @@ interface Props {
   format: (v: number) => Formatted;
   /** Faint horizontal lines, drawn only when inside the plotted range (grade limits). */
   refs?: readonly { value: number; label: string }[];
+  /** Vertical lines at moments in time: alerts, and the crash in a replay. */
+  markers?: readonly Marker[];
   height?: number;
 }
 
@@ -54,7 +62,7 @@ function paths(values: readonly (number | null)[], x: (i: number) => number, y: 
   return d;
 }
 
-export function LineChart({ title, summary, times, series, format, refs = [], height = 140 }: Props) {
+export function LineChart({ title, summary, times, series, format, refs = [], markers = [], height = 140 }: Props) {
   const id = useId();
   const [cursor, setCursor] = useState<number | null>(null);
   const all = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
@@ -95,6 +103,17 @@ export function LineChart({ title, summary, times, series, format, refs = [], he
     e.preventDefault();
   };
   const pct = (i: number) => `${(x(i) / W) * 100}%`;
+  // Each marker sits at the first point at or after its time. Its label takes the lowest of three
+  // rows with room (labels need about 12% of a phone-width chart); with no room, the line stays unlabeled.
+  const placed: (Marker & { i: number; row: number })[] = [];
+  const lastInRow: number[] = [];
+  for (const m of markers.map((m) => ({ ...m, i: times.findIndex((t) => t >= m.t), row: -1 })).filter((m) => m.i >= 0).sort((a, b) => a.i - b.i)) {
+    const at = m.i / Math.max(1, n - 1);
+    m.row = [0, 1, 2].find((r) => lastInRow[r] === undefined || at - lastInRow[r]! >= 0.12) ?? -1;
+    if (m.row >= 0) lastInRow[m.row] = at;
+    placed.push(m);
+  }
+  const rows = Math.max(0, ...placed.map((m) => m.row + 1));
 
   return (
     <figure className="rounded-lg border bg-card p-4">
@@ -122,7 +141,7 @@ export function LineChart({ title, summary, times, series, format, refs = [], he
         aria-labelledby={`${id}-title`}
         aria-describedby={`${id}-help`}
         tabIndex={0}
-        className="relative mt-3 touch-pan-y select-none rounded-sm"
+        className={`relative touch-pan-y select-none rounded-sm ${["mt-3", "mt-8", "mt-12", "mt-16"][rows]}`}
         style={{ height }}
         onPointerMove={onPointerMove}
         onPointerLeave={() => setCursor(null)}
@@ -156,6 +175,23 @@ export function LineChart({ title, summary, times, series, format, refs = [], he
             style={{ top: y(r.value) }}
           >
             {r.label}
+          </span>
+        ))}
+        {placed.map((m) => (
+          <span
+            key={`${m.label}-${m.t}`}
+            aria-hidden="true"
+            className={`absolute inset-y-0 w-px ${m.tone === "event" ? "bg-destructive" : "bg-primary"}`}
+            style={{ left: pct(m.i) }}
+          >
+            <span
+              hidden={m.row < 0}
+              className={`absolute -translate-x-1/2 -translate-y-full rounded-sm px-1 font-mono text-[10px] whitespace-nowrap ${["-top-1", "-top-6", "-top-11"][m.row] ?? ""} ${
+                m.tone === "event" ? "bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground"
+              }`}
+            >
+              {m.label}
+            </span>
           </span>
         ))}
         {cursor !== null && <span aria-hidden="true" className="absolute inset-y-0 w-px bg-muted-foreground/40" style={{ left: pct(cursor) }} />}

@@ -175,3 +175,10 @@ export function utcTime(ms: number | null | undefined, withDate = false): string
   const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   return `${date}, ${time} UTC`;
 }
+
+/** A span of minutes as people say it: 13 → "13 min", 128 → "2 h 8 min", 120 → "2 h". */
+export function minutesSpan(n: number): string {
+  if (n < 60) return `${n} min`;
+  const h = Math.floor(n / 60);
+  return n % 60 ? `${h} h ${n % 60} min` : `${h} h`;
+}

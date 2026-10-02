@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type { AlertList, AlertView, Board, BoardDex, BoardMarket, DexDetail, Health, HistoryPoint, MarketDetail } from "@telltale/collector/api-types";
+export type { ReplayAlert, ReplayResult, ReplaySummary } from "@telltale/replay/types";
 
 /** The API recomputes grades once a minute, so polling faster gains nothing. */
 export const REFRESH_MS = 60_000;

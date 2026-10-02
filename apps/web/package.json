@@ -23,6 +23,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@telltale/collector": "workspace:*",
     "@telltale/detectors": "workspace:*",
+    "@telltale/replay": "workspace:*",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",

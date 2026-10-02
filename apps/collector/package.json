@@ -13,6 +13,8 @@
     "@telltale/hl": "workspace:*"
   },
   "exports": {
-    "./api-types": "./src/api-types.ts"
+    "./api-types": "./src/api-types.ts",
+    "./watch": "./src/watch.ts",
+    "./alerts": "./src/alerts.ts"
   }
 }

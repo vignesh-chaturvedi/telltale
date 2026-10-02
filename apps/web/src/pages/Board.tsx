@@ -8,7 +8,8 @@ import { GradeBar } from "../components/GradeBar.tsx";
 import { MarketTable } from "../components/MarketTable.tsx";
 import { Num } from "../components/Num.tsx";
 import { EmptyState, ErrorState, Loading, Skeleton } from "../components/States.tsx";
-import { dexPath, useApi, type AlertList, type Board as BoardData, type BoardDex, type BoardMarket } from "../lib/api.ts";
+import { dexPath, useApi, type AlertList, type Board as BoardData, type BoardDex, type BoardMarket, type ReplaySummary } from "../lib/api.ts";
+import { ReplayCards } from "./Replays.tsx";
 import { count, usd } from "../lib/format.ts";
 import { GRADE_BADGE, GRADE_NAMES, GRADES, type Grade } from "../lib/grades.ts";
 
@@ -40,6 +41,7 @@ export function Board() {
         <>
           <Summary board={data} />
           <LatestAlerts />
+          <PastLosses />
           <Dexes dexes={data.dexes} />
           <Markets board={data} />
         </>
@@ -137,6 +139,28 @@ function LatestAlerts() {
           <AlertItem key={a.id} alert={a} />
         ))}
       </div>
+    </section>
+  );
+}
+
+/** The replays of past losses: whether the detectors would have warned in time. */
+function PastLosses() {
+  const { data } = useApi<ReplaySummary[]>("/replays/index.json");
+  if (!data?.length) return null;
+  return (
+    <section aria-labelledby="past-title" className="space-y-4">
+      <div className="flex items-baseline justify-between gap-4">
+        <div>
+          <h2 id="past-title" className="text-lg font-semibold">
+            Would Telltale have warned?
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">The live detectors, replayed over the archived data from past losses on Hyperliquid.</p>
+        </div>
+        <Link to="/replays" className="link shrink-0 text-sm">
+          All replays
+        </Link>
+      </div>
+      <ReplayCards replays={data} />
     </section>
   );
 }

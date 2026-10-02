@@ -8,6 +8,8 @@ import { Dex } from "./pages/Dex.tsx";
 import { Market } from "./pages/Market.tsx";
 import { Methodology } from "./pages/Methodology.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
+import { Replay } from "./pages/Replay.tsx";
+import { Replays } from "./pages/Replays.tsx";
 
 const REPO = "https://github.com/vignesh-chaturvedi/telltale";
 
@@ -67,6 +69,9 @@ export function App() {
                 Alerts
               </NavLink>
             )}
+            <NavLink to="/replays" className={navClass}>
+              Replays
+            </NavLink>
             <NavLink to="/methodology" className={navClass}>
               Methodology
             </NavLink>
@@ -80,6 +85,8 @@ export function App() {
           <Route path="/markets/:coin" element={<Market />} />
           <Route path="/dexes/:slug" element={<Dex />} />
           <Route path="/alerts" element={<Alerts />} />
+          <Route path="/replays" element={<Replays />} />
+          <Route path="/replays/:id" element={<Replay />} />
           <Route path="/methodology" element={<Methodology />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

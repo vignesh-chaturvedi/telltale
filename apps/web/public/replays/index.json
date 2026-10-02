@@ -1,0 +1,20 @@
+[
+  {
+    "id": "fartcoin-2026-04",
+    "name": "FARTCOIN",
+    "date": "April 8–9, 2026",
+    "lossUsd": 1500000,
+    "crashAt": 1775689200000,
+    "leadMinutes": 13,
+    "firstWarning": "Open interest up 26% in 15 minutes"
+  },
+  {
+    "id": "popcat-2025-11",
+    "name": "POPCAT",
+    "date": "November 12, 2025",
+    "lossUsd": 4900000,
+    "crashAt": 1762962720000,
+    "leadMinutes": 128,
+    "firstWarning": "Open interest up 37% in 15 minutes"
+  }
+]

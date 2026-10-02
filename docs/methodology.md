@@ -125,6 +125,19 @@ Grades describe a market over the last hour. Alerts report conditions as they ha
 
 **Calibration.** The minute alerts were first replayed over 21 hours of September 2026 data from all 329 markets. All eight then ran for 24 hours on live data before going public, recorded but not shown or sent. With the thresholds above, that comes to about 10 warnings a day across all markets, plus about 14 information alerts that stay on the site.
 
+## Replays
+
+To check whether the alerts would have helped, Telltale replays past losses through the same detector code the live site runs. The data comes from two public archives on AWS S3: Hyperliquid's own (per-minute oracle, mark and open interest for every market, and order books from 2025) and Hydromancer's Reservoir (order books once a minute from December 2025, and every fill, including liquidations).
+
+The **crash** is the start of the steepest one-minute fall in the mark price. The **lead time** is how long before it the first warning (or critical) alert started. Information alerts don't count, and an alert after the crash is a miss.
+
+| Incident | HLP's reported loss | First warning | Lead time |
+|---|---|---|---|
+| POPCAT, November 12, 2025 | about $4.9M | Open interest up 37% in 15 minutes | 2 h 8 min |
+| FARTCOIN, April 8–9, 2026 | $1.2–1.5M | Open interest up 26% in 15 minutes | 13 min |
+
+Both archives keep only the 20 best price levels on each side, about ±0.2% of the price, so the replays understate book depth. That matters for the open-interest surge alert, which also needs a thin book. Each replay therefore shows when that alert would have fired if the book had held 5, 10 or 20 times the archived depth. With 20 times, POPCAT's first warning still comes 56 minutes ahead; FARTCOIN's timing doesn't change. Each replay page lists what else its archive can't show, such as POPCAT's reported $20M order, which sat further from the price than the archive reaches.
+
 ## Known limits
 
 - **Grouped books.** Depth is counted in price buckets of 0.1–0.6% of the price, so a band's edge is accurate to about one bucket. Books show at most 20 levels per side.
@@ -135,6 +148,8 @@ Grades describe a market over the last hour. Alerts report conditions as they ha
 - **Peers are matched by exact ticker only.** Two listings of the same index under different names (such as an S&P 500 index and S&P 500 futures) aren't compared, because a futures basis would look like disagreement.
 
 ## Changes
+
+- Replays (October 2, 2026): POPCAT and FARTCOIN replayed through the live detectors, with a depth check for the archives' partial order books.
 
 - Alerts go live (October 2, 2026) after a 24-hour shadow run. In its first minutes the pulled-wall rule flagged about 60,000 walls a day, two thirds of them quotes being moved; walls must now not reappear nearby and must be far larger than the market's usual walls. A pulled wall now needs 5× the usual wall, not 3×: at 3× it raised 27 alerts in 26 hours, mostly routine.
 - Alerts (September 30, 2026): eight alert types, calibrated by replaying 21 hours of data. Depth collapse was split into information and warning levels, because a single level raised about 10 warnings a day, mostly from ordinary quote refreshes.

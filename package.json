@@ -12,6 +12,7 @@
     "collect:status": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env apps/collector/src/status.ts",
     "score": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env apps/collector/src/score.ts",
     "alerts": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env apps/collector/src/alerts-cli.ts",
+    "replay": "node --disable-warning=ExperimentalWarning apps/replay/src/cli.ts",
     "serve": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env apps/collector/src/serve.ts",
     "web": "pnpm --filter @telltale/web dev",
     "build": "pnpm --filter @telltale/web build",

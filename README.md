@@ -12,6 +12,7 @@ Status: in development for the Hyperliquid track of Colosseum's Crypto World's F
 - `packages/hl`: read-only Hyperliquid API clients and types
 - `apps/collector`: the live data pipeline, grading and the JSON API
 - `apps/web`: the website (Vite, React, Tailwind), served by the API server in production
+- `apps/replay`: replays of past incidents from public archives, through the live detectors
 - `deploy`: server setup, systemd units and the Caddy config
 
 ## Requirements
@@ -59,6 +60,14 @@ Alerts are always recorded. Two switches in the environment (`.env`, or `/etc/te
 | `ALERTS_PUBLIC_SINCE` | Show only alerts from this ISO date on, e.g. to keep a shadow run's alerts private |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Post to a Telegram channel |
 | `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_SECRET` | POST each alert as JSON, signed with `X-Telltale-Signature: sha256=…` when a secret is set |
+
+## Replays
+
+```bash
+pnpm replay                   # replay every incident; or name one: pnpm replay popcat-2025-11
+```
+
+Replays run past losses through the live detector code and write `apps/web/public/replays/<id>.json`, which the website shows at `/replays`. The data comes from Hyperliquid's public S3 archive and Hydromancer's Reservoir archive. Both are requester-pays: the AWS CLI must be configured, and you pay AWS a few cents of transfer per incident. Files are cached in `data/replay/`. Incidents are defined in `apps/replay/src/incidents.ts`.
 
 ## Website and API
 
