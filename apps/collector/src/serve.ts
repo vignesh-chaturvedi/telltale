@@ -22,8 +22,17 @@ if (!existsSync(values.db)) {
 
 // Files are looked up on each request, so a build made after startup is served without a restart.
 const webRoot = values.web || null;
-// Alerts appear on the site once ALERTS_PUBLIC=1 is set, after the shadow run.
-const api = new Api({ dbPath: values.db, windowMinutes: Number(values.window), webRoot, alertsPublic: process.env.ALERTS_PUBLIC === "1" });
+// Alerts appear on the site once ALERTS_PUBLIC=1 is set, after the shadow run, starting from
+// ALERTS_PUBLIC_SINCE (an ISO date) so the shadow run's alerts stay private.
+const since = process.env.ALERTS_PUBLIC_SINCE ? Date.parse(process.env.ALERTS_PUBLIC_SINCE) : 0;
+if (Number.isNaN(since)) log(`warn: ALERTS_PUBLIC_SINCE isn't a date: ${process.env.ALERTS_PUBLIC_SINCE}`);
+const api = new Api({
+  dbPath: values.db,
+  windowMinutes: Number(values.window),
+  webRoot,
+  alertsPublic: process.env.ALERTS_PUBLIC === "1",
+  alertsSince: Number.isNaN(since) ? 0 : since,
+});
 const refresh = () => {
   try {
     const started = performance.now();

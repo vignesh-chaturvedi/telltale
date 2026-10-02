@@ -154,4 +154,16 @@ test("alerts stay off the site until they're made public", async () => {
     server2.close();
     open.close();
   }
+
+  const later = new Api({ dbPath: join(dir, "t.db"), windowMinutes: 30, webRoot: null, now: () => now, alertsPublic: true, alertsSince: T + 60_000 });
+  later.refresh();
+  const server3 = createServer(later.handle);
+  await new Promise<void>((resolve) => server3.listen(0, "127.0.0.1", resolve));
+  try {
+    const body = (await (await fetch(`http://127.0.0.1:${(server3.address() as AddressInfo).port}/api/alerts`)).json()) as AlertList;
+    assert.deepEqual(body.alerts.map((a) => a.title), ["ETH warning", "BTC warning"], "nothing from before the public start");
+  } finally {
+    server3.close();
+    later.close();
+  }
 });

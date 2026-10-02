@@ -19,8 +19,8 @@ import { deployerChangeSignal, diffDexConfig } from "./config-diff.ts";
 import { tickerOf } from "./scoring.ts";
 import type { AlertStore, ConfigUpdate } from "./store.ts";
 
-/** Walls smaller than this aren't stored: on the first live day every wall would have added about 50 MB a day. */
-export const BOOK_EVENT_MIN_USD = 100_000;
+/** Walls smaller than this aren't stored: from $100K up they came to about 14 MB a day in the shadow run. */
+export const BOOK_EVENT_MIN_USD = 250_000;
 
 export interface WatchedMarket {
   coin: string;

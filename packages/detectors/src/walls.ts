@@ -58,8 +58,10 @@ export const DEFAULT_WALL_RULES: WallRules = {
   typical: { windowMs: 2 * 60 * 60_000, minSamples: 10 },
   minLifetimeMs: 30_000,
   // Two thirds of the side means the wall is at least twice everything else resting within ±2%.
-  warning: { usd: 250_000, shareOfDepth: 2 / 3, vsTypical: 3 },
-  critical: { usd: 2_000_000, shareOfDepth: 0.8, vsTypical: 3 },
+  // At 3× the usual wall the shadow run raised 27 alerts in 26 hours, mostly routine large walls;
+  // 5× kept the 7 that stood out (up to 37×).
+  warning: { usd: 250_000, shareOfDepth: 2 / 3, vsTypical: 5 },
+  critical: { usd: 2_000_000, shareOfDepth: 0.8, vsTypical: 5 },
 };
 
 export type WallEnd = "pulled" | "moved" | "filled" | "expired";

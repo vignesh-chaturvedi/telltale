@@ -16,6 +16,8 @@ export interface ApiOptions {
   staleAfterSeconds?: number;
   /** Show alerts on the site. Off during the shadow run, when they're only recorded. */
   alertsPublic?: boolean;
+  /** Only alerts started at or after this (epoch ms) are shown, so the shadow run's stay private. */
+  alertsSince?: number;
   now?: () => number;
 }
 
@@ -72,7 +74,7 @@ export class Api {
   private board: Board | null = null;
 
   constructor(options: ApiOptions) {
-    this.options = { staleAfterSeconds: 180, alertsPublic: false, now: Date.now, ...options, webRoot: options.webRoot ? resolve(options.webRoot) : null };
+    this.options = { staleAfterSeconds: 180, alertsPublic: false, alertsSince: 0, now: Date.now, ...options, webRoot: options.webRoot ? resolve(options.webRoot) : null };
     this.db = new DatabaseSync(options.dbPath, { readOnly: true });
   }
 
@@ -175,13 +177,15 @@ export class Api {
     return { public: true, alerts: this.alerts(where, args, limit) };
   }
 
-  private alerts(where: string[], args: (string | number)[], limit: number): AlertView[] {
+  private alerts(conditions: string[], values: (string | number)[], limit: number): AlertView[] {
+    const where = ["started_at >= ?", ...conditions];
+    const args = [this.options.alertsSince, ...values];
     try {
       const rows = this.db
         .prepare(
           `SELECT id, kind, coin, dex, severity, started_at AS startedAt, updated_at AS updatedAt, resolved_at AS resolvedAt, minutes,
              title, detail, evidence, published_at AS publishedAt
-           FROM alerts ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY started_at DESC, id DESC LIMIT ?`,
+           FROM alerts WHERE ${where.join(" AND ")} ORDER BY started_at DESC, id DESC LIMIT ?`,
         )
         .all(...args, limit);
       return rows.map((r) => toAlert(r as Record<string, unknown>));

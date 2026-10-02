@@ -79,6 +79,8 @@ export class AlertEngine {
         Object.assign(current, { updatedAt: s.at, minutes: current.minutes + 1, quiet: 0 });
         // The text follows the alert's worst moment, so it always matches the severity shown.
         if (rank >= 0) Object.assign(current, { severity: s.severity, title: s.title, detail: s.detail, evidence: s.evidence });
+        // The cooldown compares new alerts with this one's worst severity, not the one it started at.
+        if (rank > 0) this.recent.set(key, { at: current.startedAt, severity: s.severity });
         this.store.updateAlert(current);
         if (rank > 0) this.publish(current);
         continue;

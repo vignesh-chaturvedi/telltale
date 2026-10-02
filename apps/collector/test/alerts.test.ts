@@ -64,6 +64,15 @@ test("the cooldown keeps a recurring condition quiet unless it gets worse", () =
   assert.equal(sent.length, 2);
 });
 
+test("an alert that escalated cools down at its new severity", () => {
+  const { engine, store } = setup();
+  engine.onMinute(T, [signal(0, { severity: "info" })], checked);
+  engine.onMinute(T + M, [signal(1, { severity: "warning" })], checked);
+  for (let i = 2; i <= 4; i++) engine.onMinute(T + i * M, [], checked);
+  engine.onMinute(T + 23 * M, [signal(23, { severity: "warning" })], checked);
+  assert.equal(store.alerts.length, 1, "a second warning 23 minutes later stays quiet");
+});
+
 test("an open alert that escalates is sent once, at its new severity", () => {
   const { engine, sent, store } = setup();
   engine.onMinute(T, [signal(0, { severity: "info" })], checked);

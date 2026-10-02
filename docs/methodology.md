@@ -114,16 +114,16 @@ Grades describe a market over the last hour. Alerts report conditions as they ha
 | Depth collapse | Depth within ±2% stays below a share of its median over the previous 30 minutes (skipping the 5 before) for 5 straight minutes, open interest holds at 90% or more, and the market has at least $500K of open interest and a $100K baseline | below 40%, leaving under 3% of open interest | below 25%, leaving under 2% | |
 | Open-interest surge | Open interest rises 25% or more, and by at least $250K, within 15 minutes, in a market with less than 5% of its open interest within ±2% | | any | |
 | Near open-interest cap | Open interest reaches 90% of its cap | any | | |
-| Pulled wall | A level worth $50K or more, and 5× the typical level or 25% of its side's ±2% depth, stands for at least two snapshots and is removed within 10 minutes with under 10% filled, before the price reaches it | smaller | ≥ $250K and ≥ 25% of its side | ≥ $2M and ≥ 50% of its side |
+| Pulled wall | A large level stands for 30 s to 10 minutes and is removed with under 10% filled, before the price reaches it, and no similar wall goes up within 1% of its price in the next 15 s | | ≥ $250K, ≥ ⅔ of its side within ±2% (twice everything else) and ≥ 5× the market's usual wall over the past 2 hours | ≥ $2M, ≥ 80% of its side and ≥ 5× the usual wall |
 | Deployer change | A DEX changes a setting: listing or delisting a market, leverage, open-interest caps, margin mode, fees, funding settings, the deployer, the oracle updater, or permissions | other changes | delisting, leverage, deployer, oracle updater or oracle permissions | |
 
 **One alert per episode.** A condition that holds for several minutes is one alert, which closes after 3 checked minutes without it. After an alert starts, the same kind of alert for the same market stays quiet for 12 hours unless it gets more severe. An alert keeps the text of its most severe moment.
 
 **What is sent where.** Every alert is listed on the site. Warnings and critical alerts are also posted to the Telegram channel and the webhook, at most 3 a minute and 20 a day, so a market-wide move can't flood the channel. Past those limits, alerts stay on the site.
 
-**Pulled walls need live order books.** They're tracked on the 300 markets whose books are streamed (a snapshot about every 5 seconds) and on the 28 deepest, polled every 30 seconds. Prices are grouped to 3 significant figures, so a wall is a price bucket, possibly several orders. Every wall that appears and how it ends (pulled, filled, or standing past 10 minutes) is stored as evidence.
+**Pulled walls need live order books.** They're tracked on the 300 markets whose books are streamed (a snapshot about every 5 seconds) and on the 28 deepest, polled every 30 seconds. Prices are grouped to 3 significant figures, so a wall is a price bucket, possibly several orders. Large levels come and go constantly: market makers re-quote as the price moves, so a wall that reappears nearby within seconds counts as moved, not pulled, and only walls far beyond the market's usual size raise an alert. How every wall of $250K or more ended (pulled, moved, filled, or standing past 10 minutes) is stored as evidence.
 
-**Calibration.** Replayed over 21 hours of September 2026 data from all 329 markets, these thresholds raise about 9 warnings a day and about 25 information alerts. Before alerts go public they run for 24 hours in a shadow run: recorded, but not shown or sent.
+**Calibration.** The minute alerts were first replayed over 21 hours of September 2026 data from all 329 markets. All eight then ran for 24 hours on live data before going public, recorded but not shown or sent. With the thresholds above, that comes to about 10 warnings a day across all markets, plus about 14 information alerts that stay on the site.
 
 ## Known limits
 
@@ -136,6 +136,7 @@ Grades describe a market over the last hour. Alerts report conditions as they ha
 
 ## Changes
 
+- Alerts go live (October 2, 2026) after a 24-hour shadow run. In its first minutes the pulled-wall rule flagged about 60,000 walls a day, two thirds of them quotes being moved; walls must now not reappear nearby and must be far larger than the market's usual walls. A pulled wall now needs 5× the usual wall, not 3×: at 3× it raised 27 alerts in 26 hours, mostly routine.
 - Alerts (September 30, 2026): eight alert types, calibrated by replaying 21 hours of data. Depth collapse was split into information and warning levels, because a single level raised about 10 warnings a day, mostly from ordinary quote refreshes.
 
 - v0 (September 2026): first version, calibrated on three hours of data from all 328 live markets.

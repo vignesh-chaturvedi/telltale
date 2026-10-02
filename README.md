@@ -56,6 +56,7 @@ Alerts are always recorded. Two switches in the environment (`.env`, or `/etc/te
 |---|---|
 | `ALERTS_PUBLISH=1` | Send warnings and critical alerts to the channels below (off during the shadow run) |
 | `ALERTS_PUBLIC=1` | Show alerts on the website and in the API |
+| `ALERTS_PUBLIC_SINCE` | Show only alerts from this ISO date on, e.g. to keep a shadow run's alerts private |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Post to a Telegram channel |
 | `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_SECRET` | POST each alert as JSON, signed with `X-Telltale-Signature: sha256=…` when a secret is set |
 
