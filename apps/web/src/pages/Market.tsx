@@ -2,6 +2,7 @@ import { Info } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { AlertItem } from "../components/AlertItem.tsx";
+import { EmbedBadge } from "../components/EmbedBadge.tsx";
 import { Freshness } from "../components/Freshness.tsx";
 import { GradeBadge } from "../components/GradeBadge.tsx";
 import { LineChart } from "../components/LineChart.tsx";
@@ -190,6 +191,8 @@ function MarketBody({ market, receivedAt }: { market: MarketDetail; receivedAt: 
       </section>
 
       <History market={market} />
+
+      <EmbedBadge coin={market.coin} />
     </>
   );
 }

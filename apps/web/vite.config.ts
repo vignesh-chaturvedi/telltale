@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5178,
-    // The methodology page imports docs/methodology.md from the repository root.
+    // The methodology and API pages import their Markdown from docs/ at the repository root.
     fs: { allow: [repoRoot] },
     proxy: { "/api": "http://127.0.0.1:8740" },
   },

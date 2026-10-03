@@ -12,13 +12,15 @@
     "collect:status": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env apps/collector/src/status.ts",
     "score": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env apps/collector/src/score.ts",
     "alerts": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env apps/collector/src/alerts-cli.ts",
+    "traffic": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env apps/collector/src/traffic-cli.ts",
     "replay": "node --disable-warning=ExperimentalWarning apps/replay/src/cli.ts",
     "serve": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env apps/collector/src/serve.ts",
     "web": "pnpm --filter @telltale/web dev",
     "build": "pnpm --filter @telltale/web build",
     "fixtures:record": "node apps/collector/scripts/record-fixtures.ts",
     "test": "node --disable-warning=ExperimentalWarning --test \"packages/*/test/**/*.test.ts\" \"apps/*/test/**/*.test.ts\"",
-    "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json",
+    "detectors:pack": "node --disable-warning=ExperimentalWarning packages/detectors/scripts/check-pack.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

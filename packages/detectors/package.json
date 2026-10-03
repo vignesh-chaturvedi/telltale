@@ -1,10 +1,39 @@
 {
   "name": "@telltale/detectors",
-  "version": "0.0.0",
-  "description": "Market-risk metrics and manipulation detectors for Hyperliquid markets, as pure functions with no dependencies.",
+  "version": "0.1.0",
+  "description": "Market-risk metrics, A–E grades and manipulation detectors for Hyperliquid markets, as pure functions with no dependencies.",
+  "keywords": ["hyperliquid", "hip-3", "perpetuals", "order-book", "market-risk", "oracle", "manipulation"],
+  "homepage": "https://telltale.markets",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vignesh-chaturvedi/telltale.git",
+    "directory": "packages/detectors"
+  },
   "license": "Apache-2.0",
   "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
   "exports": {
     ".": "./src/index.ts"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "rm -rf dist && tsc -p tsconfig.build.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
   }
 }

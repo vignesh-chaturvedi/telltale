@@ -4,6 +4,7 @@ import { extname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { GRADES, type Grade } from "@telltale/detectors";
 import type { AlertList, AlertView, Board, BoardDex, BoardMarket, DexDetail, Health, HistoryPoint, MarketDetail } from "./api-types.ts";
+import { badgeSvg, type BadgeState } from "./badge.ts";
 import { scoreDatabase, type ScoredMarket, type Scorecard } from "./scoring.ts";
 import { toAlert } from "./store.ts";
 
@@ -125,6 +126,9 @@ export class Api {
     if (!this.card || !this.board) return this.send(res, 503, { error: "The scorecard hasn't been computed yet." });
     if (path === "/api/board") return this.send(res, 200, this.board);
 
+    const badge = path.match(/^\/api\/badge\/(.+)\.svg$/);
+    if (badge) return this.badge(badge[1]!, res);
+
     const market = path.match(/^\/api\/markets\/(.+)$/);
     if (market) {
       const detail = this.marketDetail(market[1]!);
@@ -226,6 +230,20 @@ export class Api {
     };
   }
 
+  /** `/api/badge/<coin>.svg`: the market's grade as an image, for other sites to embed. */
+  private badge(coin: string, res: ServerResponse): void {
+    const m = this.card!.markets.find((x) => x.coin === coin);
+    const state: BadgeState = !m ? { kind: "unknown" } : m.grade.grade ? { kind: "graded", grade: m.grade.grade } : { kind: "ungraded" };
+    res.writeHead(m ? 200 : 404, {
+      "Content-Type": "image/svg+xml; charset=utf-8",
+      "Cache-Control": m ? "public, max-age=300" : "no-store",
+      "Access-Control-Allow-Origin": "*",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+    });
+    res.end(badgeSvg(coin, state));
+  }
+
   /** Seconds since the end of the given minute. */
   private dataAge(minute: number, now: number): number {
     return Math.max(0, Math.round((now - (minute + 60_000)) / 1000));
@@ -236,6 +254,8 @@ export class Api {
     res.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": status === 200 ? cache : "no-store",
+      // The data is public and read-only, so any site may call the API from the browser.
+      "Access-Control-Allow-Origin": "*",
       "X-Content-Type-Options": "nosniff",
     });
     res.end(json);

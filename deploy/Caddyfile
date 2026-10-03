@@ -11,7 +11,7 @@ telltale.markets {
 	log {
 		output file /var/log/caddy/telltale.log {
 			roll_size 10MiB
-			roll_keep 5
+			roll_keep 30
 		}
 	}
 }

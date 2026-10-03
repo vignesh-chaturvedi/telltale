@@ -145,7 +145,7 @@
   @apply min-h-10 rounded-md border bg-input px-3 text-sm text-foreground placeholder:text-muted-foreground;
 }
 
-/* The methodology page: long-form reading, rendered from docs/methodology.md. */
+/* The methodology and API pages: long-form reading, rendered from docs/. */
 @layer components {
   .prose {
     @apply text-base leading-7;
@@ -180,6 +180,12 @@
   }
   .prose code {
     @apply rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.875em];
+  }
+  .prose pre {
+    @apply overflow-x-auto rounded-lg border bg-muted px-4 py-3 text-sm leading-6;
+  }
+  .prose pre code {
+    @apply rounded-none bg-transparent p-0 text-[0.8125rem];
   }
   .prose blockquote {
     @apply border-l-2 border-primary pl-4 text-muted-foreground;

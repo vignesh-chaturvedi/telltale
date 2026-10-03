@@ -1,12 +1,13 @@
 import { useEffect } from "react";
-import source from "../../../../docs/methodology.md?raw";
+import source from "../../../../docs/api.md?raw";
 import { renderMarkdown } from "../lib/markdown.ts";
 
 const html = renderMarkdown(source);
 
-export function Methodology() {
+/** The API reference, rendered from docs/api.md. */
+export function Developers() {
   useEffect(() => {
-    document.title = "Methodology · Telltale";
+    document.title = "API · Telltale";
   }, []);
   return <article className="prose max-w-3xl" dangerouslySetInnerHTML={{ __html: html }} />;
 }

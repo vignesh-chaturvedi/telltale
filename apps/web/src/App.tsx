@@ -4,6 +4,7 @@ import { ThemeToggle } from "./components/ThemeToggle.tsx";
 import { useApi, type Health } from "./lib/api.ts";
 import { Alerts } from "./pages/Alerts.tsx";
 import { Board } from "./pages/Board.tsx";
+import { Developers } from "./pages/Developers.tsx";
 import { Dex } from "./pages/Dex.tsx";
 import { Market } from "./pages/Market.tsx";
 import { Methodology } from "./pages/Methodology.tsx";
@@ -88,6 +89,7 @@ export function App() {
           <Route path="/replays" element={<Replays />} />
           <Route path="/replays/:id" element={<Replay />} />
           <Route path="/methodology" element={<Methodology />} />
+          <Route path="/developers" element={<Developers />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
@@ -103,6 +105,9 @@ export function App() {
             </a>
             <Link to="/methodology" className="link-muted">
               Methodology
+            </Link>
+            <Link to="/developers" className="link-muted">
+              API
             </Link>
           </p>
         </div>

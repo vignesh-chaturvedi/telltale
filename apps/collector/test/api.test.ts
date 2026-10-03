@@ -88,6 +88,32 @@ test("unknown markets and DEXs are 404s with a message", async () => {
   assert.equal((await get("/api/dexes/nope")).status, 404);
 });
 
+test("any site can read the API from the browser", async () => {
+  const { headers } = await get("/api/board");
+  assert.equal(headers.get("access-control-allow-origin"), "*");
+});
+
+test("a market's badge is an SVG with its grade, and unknown markets get a 404 badge", async () => {
+  const board = (await get<Board>("/api/board")).body;
+  const btc = board.markets.find((m) => m.coin === "BTC")!;
+  const graded = await get<string>("/api/badge/BTC.svg");
+  assert.equal(graded.status, 200);
+  assert.equal(graded.headers.get("content-type"), "image/svg+xml; charset=utf-8");
+  assert.equal(graded.headers.get("cache-control"), "public, max-age=300");
+  assert.match(graded.body, new RegExp(`aria-label="Telltale grade for BTC: ${btc.grade}, `));
+
+  const hip3 = await get<string>(`/api/badge/${encodeURIComponent("xyz:AVGO")}.svg`);
+  assert.equal(hip3.status, 200);
+  assert.match(hip3.body, /Telltale grade for xyz:AVGO/);
+
+  const ungraded = await get<string>("/api/badge/ETH.svg");
+  assert.match(ungraded.body, />not graded</);
+
+  const unknown = await get<string>(`/api/badge/${encodeURIComponent("<x>")}.svg`);
+  assert.equal(unknown.status, 404);
+  assert.match(unknown.body, /a market named &#60;x&#62;/, "the name is escaped");
+});
+
 test("a DEX's detail lists only its markets", async () => {
   const { status, body } = await get<DexDetail>("/api/dexes/para");
   assert.equal(status, 200);

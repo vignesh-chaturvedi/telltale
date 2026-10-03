@@ -130,7 +130,7 @@ function LatestAlerts() {
         <h2 id="latest-alerts-title" className="text-lg font-semibold">
           Latest alerts
         </h2>
-        <Link to="/alerts" className="link text-sm">
+        <Link to="/alerts" className="link -my-2.5 shrink-0 py-2.5 text-sm">
           All alerts
         </Link>
       </div>
@@ -156,7 +156,7 @@ function PastLosses() {
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">The live detectors, replayed over the archived data from past losses on Hyperliquid.</p>
         </div>
-        <Link to="/replays" className="link shrink-0 text-sm">
+        <Link to="/replays" className="link -my-2.5 shrink-0 py-2.5 text-sm">
           All replays
         </Link>
       </div>

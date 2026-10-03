@@ -96,6 +96,8 @@ test("an alert needs a wall far beyond the market's usual ones, most of its side
   assert.equal(signal.severity, "critical");
   assert.equal(signal.title, "A $2.5M bid wall was pulled after 1 min");
   assert.match(signal.detail, /87% of the bid side within ±2% of mid and 21× this market's usual large order/);
+  assert.match(signal.detail, /^A bid of \$2\.5M/);
+  assert.match(pulledWallSignal({ ...pulled, side: "ask" }, "")!.detail, /^An ask of \$2\.5M/);
 });
 
 test("ordinary-sized pulled walls, brief ones, and walls in markets without history raise nothing", () => {

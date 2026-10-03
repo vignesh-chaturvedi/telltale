@@ -264,7 +264,7 @@ export function pulledWallSignal(e: WallEvent, dex: string, rules: WallRules = D
     at: e.at,
     title: `A ${usd(e.peakUsd)} ${e.side} wall was pulled after ${duration(lifetime)}`,
     detail:
-      `A ${e.side} of ${usd(e.peakUsd)} at ${price(e.px)}, ${pct(Math.min(share, 1))} of the ${e.side} side within ±2% of mid and ` +
+      `${e.side === "ask" ? "An" : "A"} ${e.side} of ${usd(e.peakUsd)} at ${price(e.px)}, ${pct(Math.min(share, 1))} of the ${e.side} side within ±2% of mid and ` +
       `${times.toFixed(0)}× this market's usual large order, was removed after ${duration(lifetime)} with ${usd(e.filledUsd)} filled, ` +
       `before the price reached it.`,
     evidence: {
