@@ -59,7 +59,7 @@ function DexBody({ detail }: { detail: DexDetail }) {
       <header className="flex flex-wrap items-center gap-4">
         <GradeBadge grade={dex.grade} size="lg" note={dex.reasons[0]} />
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{dex.fullName}</h1>
+          <h1 className="display text-4xl sm:text-5xl">{dex.fullName}</h1>
           <p className="text-sm text-muted-foreground">
             <span className="font-mono">{dex.dex || "core"}</span>
             {dex.dex ? " · a HIP-3 DEX whose deployer runs the oracle" : " · Hyperliquid's own markets, with validator-run oracles"}
@@ -124,7 +124,7 @@ function DexBody({ detail }: { detail: DexDetail }) {
             </EmptyState>
           </div>
         ) : (
-          <MarketTable markets={markets} caption={`Markets on ${dex.fullName}`} showDex={false} />
+          <MarketTable markets={markets} caption={`Markets on ${dex.fullName}`} showDex={false} pageSize={20} resetKey={dex.slug} />
         )}
       </section>
     </>

@@ -29,7 +29,9 @@ export function Alerts() {
   return (
     <div className="space-y-8">
       <header className="max-w-3xl space-y-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Alerts</h1>
+        <h1 className="display text-4xl sm:text-5xl">
+          Alerts, <span className="text-primary">as they happen.</span>
+        </h1>
         <p className="text-base leading-7 text-muted-foreground text-pretty">
           Conditions behind past losses on Hyperliquid, as they happen: the mark price pulling away from the oracle, an oracle that stops
           updating while the market moves, order books thinning out, walls that are pulled before the price reaches them, and deployer changes.
@@ -102,7 +104,10 @@ export function Alerts() {
         </div>
       )}
       {data?.public && data.alerts.length > 0 && (
-        <section aria-label="Alert log" className="rounded-lg border bg-card">
+        <section aria-labelledby="alert-log-title" className="border bg-card">
+          <h2 id="alert-log-title" className="sr-only">
+            Alert log
+          </h2>
           {data.alerts.map((a) => (
             <AlertItem key={a.id} alert={a} />
           ))}

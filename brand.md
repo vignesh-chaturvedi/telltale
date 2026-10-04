@@ -2,24 +2,28 @@
 
 Live safety ratings (A–E) for every market on Hyperliquid, with alerts.
 
-_Set on 2026-09-29. Change the tokens in `apps/web/src/index.css` and this file together._
+_Set on 2026-09-29; the editorial revamp (paper, stone bands, a serif display face, square buttons, motion) on 2026-10-04. Change the tokens in `apps/web/src/index.css` and this file together._
 
 ## Palette — Signal Teal
 
 **Vibe:** calm · technical · fresh. Live data you can trust; cool but not cold.
 **Category:** infra/data
 **Mood:** calm · minimal
-**Reference:** L2BEAT (a risk-rating site for rollups)
+**Reference:** L2BEAT (a risk-rating site for rollups); the October revamp took its layout and editorial feel from solomonlabs.org (a light serif display, two-tone headlines, dot labels, alternating bands, square buttons with long arrows, an engraved centrepiece).
 
 ### Seeds
 
 | Role | Dark OKLCH | Dark hex | Light OKLCH | Light hex |
 |---|---|---|---|---|
-| bg-base | `oklch(0.13 0.015 200)` | `#020909` | `oklch(0.982 0.01 200)` | `#F2FBFC` |
-| bg-elevated | `oklch(0.18 0.02 200)` | `#061415` | `oklch(1 0 0)` | `#FFFFFF` |
-| primary | `oklch(0.74 0.14 195)` | `#00C5C6` | `oklch(0.5 0.14 195)` | `#007A7C` |
+| bg-base (paper) | `oklch(0.145 0.01 200)` | `#060B0C` | `oklch(0.978 0.006 95)` | `#F9F8F3` |
+| bg-elevated (cards) | `oklch(0.19 0.013 200)` | `#0D1616` | `oklch(1 0 0)` | `#FFFFFF` |
+| band (stone / night) | `oklch(0.11 0.008 200)` | `#020505` | `oklch(0.948 0.008 95)` | `#EFEEE8` |
+| primary | `oklch(0.76 0.14 194)` | `#00CCCB` | `oklch(0.5 0.14 195)` | `#007A7C` |
 | primary-soft | `oklch(0.85 0.1 195)` | `#76E2E2` | `oklch(0.65 0.1 195)` | `#2CA2A2` |
-| fg-base | `oklch(0.96 0.01 200)` | `#EBF4F4` | `oklch(0.18 0.015 200)` | `#091414` |
+| fg-base (ink) | `oklch(0.95 0.01 100)` | `#F0EFE7` | `oklch(0.2 0.008 200)` | `#121717` |
+| signal (the red tick) | `oklch(0.64 0.19 30)` | | `oklch(0.6 0.2 30)` | `#DE3E2D` |
+
+**Surfaces.** Paper for reading sections, white cards on it, and full-width **bands** (header, hero, methodology, builders, footer) that are stone in light and near-black in dark, so sections alternate in both themes. Bands use their own tokens (`--band`, `--band-raised`, `--band-foreground`, `--band-muted`, `--band-border`, `--band-accent`, `--hero`) through the `band` utility. Corners are square (`--radius` 2 px, buttons 0); grids of cards share hairline borders instead of gaps. The red `--signal` appears only as the small warning ticks around the hero and the live clock's dot.
 
 ### Tokens (applied to `apps/web/src/index.css`)
 
@@ -28,23 +32,27 @@ The full shadcn-style token set lives in `:root` (light) and `.dark` (dark) in `
 **Light mode (`:root`):**
 
 ```css
---background: oklch(0.982 0.01 200);
---foreground: oklch(0.18 0.015 200);
+--background: oklch(0.978 0.006 95);
+--foreground: oklch(0.2 0.008 200);
 --primary: oklch(0.5 0.14 195);
---primary-foreground: oklch(0.98 0 0);
---muted-foreground: oklch(0.45 0.015 200);
---border: oklch(0.902 0.01 200);
+--muted-foreground: oklch(0.49 0.01 200);
+--border: oklch(0.9 0.008 95);
+--band: oklch(0.948 0.008 95);
+--band-foreground: oklch(0.2 0.008 200);
+--band-accent: oklch(0.5 0.14 195);
 ```
 
 **Dark mode (`.dark`):**
 
 ```css
---background: oklch(0.13 0.015 200);
---foreground: oklch(0.96 0.01 200);
---primary: oklch(0.74 0.14 195);
---primary-foreground: oklch(0.1 0 0);
---muted-foreground: oklch(0.66 0.01 200);
---border: oklch(0.26 0.02 200);
+--background: oklch(0.145 0.01 200);
+--foreground: oklch(0.95 0.01 100);
+--primary: oklch(0.76 0.14 194);
+--muted-foreground: oklch(0.71 0.01 200);
+--border: oklch(0.27 0.015 200);
+--band: oklch(0.11 0.008 200);
+--band-foreground: oklch(0.95 0.012 100);
+--band-accent: oklch(0.8 0.13 192);
 ```
 
 The dark-mode `--destructive` is `oklch(0.55 0.21 25)` rather than the more common `oklch(0.65 0.22 25)`, because that only reaches about 3.6:1 with white text.
@@ -84,22 +92,27 @@ A stay with two ribbons streaming from it. On a sail, telltales are the ribbons 
 - Always on the dark tile (`#061415`): the stay is `#EBF4F4` at 55% opacity, the upper ribbon `#00C5C6`, the lower `#76E2E2`. The tile and its colors stay the same in light and dark themes.
 - Files in `brand/`: `logo.svg` (the tile, the source for everything else), `mark.svg` (the mark alone, for dark surfaces), `telltale-avatar-x-400.png`, `telltale-avatar-telegram-640.png`, `telltale-avatar-1600.png`, and `telltale-header-x-1500x500.png`.
 - The website's favicon and header logo use the same drawing (`apps/web/public/favicon.svg`, `Logo` in `App.tsx`).
+- The home hero shows the mark struck in liquid metal (Paper Shaders' `LiquidMetal`, masked by `apps/web/public/telltale-mark-mask.svg`) on the dark tile, inside rings of guilloche: the engraved interlaced lines of banknotes. The tile stays dark in both themes; without WebGL the flat mark shows.
 - Social headers keep text out of the bottom-left quarter, where X places the profile photo.
 
-## Typography — Inter + JetBrains Mono
+## Typography — Newsreader + Inter + JetBrains Mono
 
-- **Display and body:** Inter (variable)
+- **Display (headlines):** Newsreader (variable, optical size 72), light weight 320, tracking −0.028 em
+- **Body and UI:** Inter (variable)
 - **Mono (numbers, tickers, addresses):** JetBrains Mono (variable)
 
-Self-hosted with `@fontsource-variable/inter` and `@fontsource-variable/jetbrains-mono`, imported in `apps/web/src/main.tsx`, so visitors never load fonts from a third party. Tailwind reads them from `--font-sans` and `--font-mono` in `index.css`.
+Self-hosted with `@fontsource-variable/newsreader`, `@fontsource-variable/inter` and `@fontsource-variable/jetbrains-mono`, imported in `apps/web/src/main.tsx`, so visitors never load fonts from a third party. Tailwind reads them from `--font-display`, `--font-sans` and `--font-mono` in `index.css`; the `display` utility sets the headline face, weight and tracking together.
+
+Headlines are two-tone: the last phrase is in the accent ("Five checks. **One grade.**"), passed as `accent` to `Headline` in `components/ui.tsx`. A small dot label (`Eyebrow`, "• How grades work") sits above each section headline.
 
 ### Type scale
 
 | Role | Class | Use |
 |---|---|---|
-| Display | `text-4xl font-semibold tracking-tight` | Home headline only |
-| H1 (page) | `text-2xl font-semibold tracking-tight` | Page title |
-| H2 (section) | `text-lg font-semibold` | Section breaks |
+| Hero | `display text-5xl sm:text-6xl lg:text-[4.5rem]` | Home headline only |
+| Section headline | `display text-4xl sm:text-5xl` | Each home section, page titles |
+| Statement | `display text-3xl sm:text-[2.75rem]` | The centred statement under the hero |
+| H3 (subsection) | `text-lg font-semibold` | Section breaks inside a page |
 | H3 (subsection) | `text-sm font-medium` | Card titles |
 | Body | `text-sm` | Default UI text |
 | Reading | `text-base leading-7` | The methodology page |
@@ -108,7 +121,16 @@ Self-hosted with `@fontsource-variable/inter` and `@fontsource-variable/jetbrain
 
 ## Gradients (not used)
 
-The mood is calm and minimal, and flat surfaces keep attention on the grades and numbers. None were generated.
+The mood is calm and minimal, and flat surfaces keep attention on the grades and numbers. The only gradient is the logo tile's own soft radial light in the hero.
+
+## Motion
+
+Motion (`motion/react`, loaded through `LazyMotion` with `domAnimation`) with presets in `apps/web/src/lib/motion.ts`. Springs for anything that moves into place, short fades for anything that only changes.
+
+- **Hero:** the headline rises line by line; the stats roll in like an odometer (`RollingNumber`); as the page scrolls, the mark sinks and shrinks a little, its rings turn, and the copy drifts up and fades.
+- **Sections:** headlines rise word by word from behind a mask; cards and blocks rise 16 px and fade in once (`Reveal`); the statement lights up word by word as it's read (`ScrollWords`).
+- **Data:** the A–E bar draws itself, the grade counts and replay lead times roll; the live grade ticker drifts under the hero and pauses under the pointer or focus.
+- **Never on the board's rows or text someone is reading, and never more than this.** `MotionConfig reducedMotion="user"` and `useReducedMotion` turn every move off for viewers who ask for less motion: the page is then still and fully visible.
 
 ## Tone and voice
 
@@ -132,7 +154,9 @@ Anything that accuses or alarms: "manipulated", "scam", "rug", "attack", "danger
 - Keep the 4 px spacing grid (`gap-2`, `p-4`, `px-6`).
 - Follow the system theme by default via the `.dark` class on `<html>`, and let viewers override it.
 - Use `font-mono tabular-nums` for every number that updates in place.
-- Keep teal for interaction (buttons, links, focus) and the grade colors for grades.
+- Keep teal for interaction (buttons, links, focus), the accent phrase of headlines, and the grade colors for grades.
+- Use `ButtonLink` for calls to action: square, with the long arrow (`ink` on paper, `cream` on bands, `arrow` for the quiet one).
+- Put full-width sections in `Container` and dark or stone sections in the `band` utility, so both themes alternate correctly.
 - Check every component in light and dark mode.
 
 **Don't:**

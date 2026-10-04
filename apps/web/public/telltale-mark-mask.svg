@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="70 70 260 260" width="520" height="520">
+  <!-- The Telltale mark as a solid mask (brand/logo.svg without the tile), for the hero's liquid-metal shader. -->
+  <g fill="none" stroke="#000" stroke-linecap="round">
+    <line x1="112" y1="96" x2="112" y2="304" stroke-width="22"/>
+    <path d="M112 162 C 152 142, 186 182, 228 166 C 256 156, 280 150, 302 154" stroke-width="40"/>
+    <path d="M112 238 C 148 220, 178 254, 214 242 C 238 234, 258 230, 276 233" stroke-width="40"/>
+  </g>
+</svg>

@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { marketPath, splitCoin, type BoardMarket } from "../lib/api.ts";
 import { bps, percent, usd } from "../lib/format.ts";
@@ -89,8 +89,24 @@ function compare(a: number | string | null, b: number | string | null, dir: Dir)
   return dir === "asc" ? order : -order;
 }
 
-/** Sortable table of markets. The sort lives in the URL (?sort=oracle&dir=desc) so views can be shared. */
-export function MarketTable({ markets, caption, showDex = true }: { markets: readonly BoardMarket[]; caption: string; showDex?: boolean }) {
+/**
+ * Sortable table of markets. The sort lives in the URL (?sort=oracle&dir=desc) so views can be shared.
+ * With a page size, it shows that many rows and offers more; `resetKey` (the filters) collapses it again,
+ * so the minute-by-minute refresh never does.
+ */
+export function MarketTable({
+  markets,
+  caption,
+  showDex = true,
+  pageSize,
+  resetKey = "",
+}: {
+  markets: readonly BoardMarket[];
+  caption: string;
+  showDex?: boolean;
+  pageSize?: number;
+  resetKey?: string;
+}) {
   const COLUMNS = showDex ? WITH_DEX : WITHOUT_DEX;
   const [params, setParams] = useSearchParams();
   const sortKey = COLUMNS.some((c) => c.key === params.get("sort") && c.sort) ? params.get("sort")! : DEFAULT_SORT;
@@ -101,6 +117,16 @@ export function MarketTable({ markets, caption, showDex = true }: { markets: rea
     return [...markets].sort((a, b) => compare(col.sort!(a), col.sort!(b), dir) || a.coin.localeCompare(b.coin));
   }, [COLUMNS, markets, sortKey, dir]);
 
+  const page = pageSize ?? Infinity;
+  const [shown, setShown] = useState(page);
+  useEffect(() => setShown(page), [page, resetKey]);
+  const rows = sorted.slice(0, shown);
+  const top = useRef<HTMLDivElement>(null);
+  const collapse = () => {
+    setShown(page);
+    top.current?.scrollIntoView({ block: "start" });
+  };
+
   const sortBy = (key: string) => {
     const next = new URLSearchParams(params);
     const nextDir: Dir = key === sortKey ? (dir === "asc" ? "desc" : "asc") : key === "market" ? "asc" : "desc";
@@ -110,7 +136,8 @@ export function MarketTable({ markets, caption, showDex = true }: { markets: rea
   };
 
   return (
-    <div className="relative overflow-x-auto rounded-lg border bg-card">
+    <div ref={top} className="border bg-card">
+      <div className="relative overflow-x-auto">
       <table className="w-full border-collapse text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead>
@@ -145,7 +172,7 @@ export function MarketTable({ markets, caption, showDex = true }: { markets: rea
           </tr>
         </thead>
         <tbody>
-          {sorted.map((m) => (
+          {rows.map((m) => (
             <tr key={m.coin} className="group border-b last:border-b-0 hover:bg-muted/60">
               {COLUMNS.map((c, i) =>
                 i === 0 ? (
@@ -162,6 +189,30 @@ export function MarketTable({ markets, caption, showDex = true }: { markets: rea
           ))}
         </tbody>
       </table>
+      </div>
+      {sorted.length > page && (
+        <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            Showing <span className="tabular-nums">{rows.length}</span> of <span className="tabular-nums">{sorted.length}</span> markets
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {shown < sorted.length ? (
+              <>
+                <button type="button" onClick={() => setShown((s) => s + page)} className="btn-secondary">
+                  Show {Math.min(page, sorted.length - shown)} more
+                </button>
+                <button type="button" onClick={() => setShown(Infinity)} className="btn-ghost">
+                  Show all {sorted.length}
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={collapse} className="btn-ghost">
+                Show fewer
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

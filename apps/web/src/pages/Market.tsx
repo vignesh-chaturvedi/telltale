@@ -86,9 +86,9 @@ function MarketBody({ market, receivedAt }: { market: MarketDetail; receivedAt: 
         <div className="flex flex-wrap items-center gap-4">
           <GradeBadge grade={g.grade} size="lg" note={g.notes[0]} />
           <div className="min-w-0">
-            <h1 className="font-mono text-2xl font-semibold tracking-tight">
+            <h1 className="display text-4xl sm:text-5xl">
               {ticker}
-              {market.dex && <span className="text-base font-normal text-muted-foreground"> on {market.dexName}</span>}
+              {market.dex && <span className="font-sans text-base tracking-normal text-muted-foreground"> on {market.dexName}</span>}
             </h1>
             <p className="text-sm text-muted-foreground">
               {g.grade ? (

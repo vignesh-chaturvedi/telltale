@@ -105,8 +105,8 @@ function ReplayBody({ r }: { r: ReplayResult }) {
   return (
     <>
       <header className="max-w-3xl space-y-4">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          <span className="font-mono">{r.name}</span>, {r.date}
+        <h1 className="display text-4xl sm:text-5xl">
+          {r.name}, <span className="text-muted-foreground">{r.date}</span>
         </h1>
         <p className="text-base leading-7 text-muted-foreground text-pretty">{r.summary}</p>
         <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -119,14 +119,14 @@ function ReplayBody({ r }: { r: ReplayResult }) {
         </p>
       </header>
 
-      <section aria-labelledby="result-title" className="max-w-3xl rounded-lg border bg-card p-5">
+      <section aria-labelledby="result-title" className="max-w-3xl border bg-card p-6 sm:p-8">
         <h2 id="result-title" className="sr-only">
           Result
         </h2>
         {r.firstWarning && r.leadMinutes !== null ? (
           <>
             <p className="text-sm text-muted-foreground">Telltale's first warning came</p>
-            <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">{minutesSpan(r.leadMinutes)} before the crash</p>
+            <p className="display mt-2 text-4xl text-primary tabular-nums sm:text-5xl">{minutesSpan(r.leadMinutes)} before the crash</p>
             <p className="mt-3 text-sm text-pretty">
               At {utcTime(r.firstWarning.startedAt)}: {r.firstWarning.first.title}. {r.firstWarning.first.detail} The steepest fall began at{" "}
               {utcTime(r.crashAt)}.
@@ -134,7 +134,7 @@ function ReplayBody({ r }: { r: ReplayResult }) {
           </>
         ) : (
           <>
-            <p className="text-3xl font-semibold tracking-tight">No warning before the crash</p>
+            <p className="display text-4xl">No warning before the crash</p>
             <p className="mt-3 text-sm text-pretty">None of the alerts reached warning level before the steepest fall began at {utcTime(r.crashAt)}.</p>
           </>
         )}

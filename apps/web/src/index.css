@@ -5,27 +5,38 @@
 
 @layer base {
   :root {
-    /* Light mode — derived from Signal Teal (see brand.md) */
-    --background: oklch(0.982 0.01 200);
-    --foreground: oklch(0.18 0.015 200);
+    /* Light: a warm paper ground, ink type, Telltale teal for the one colour that means something (brand.md). */
+    --background: oklch(0.978 0.006 95);
+    --foreground: oklch(0.2 0.008 200);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.18 0.015 200);
+    --card-foreground: oklch(0.2 0.008 200);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.18 0.015 200);
+    --popover-foreground: oklch(0.2 0.008 200);
     --primary: oklch(0.5 0.14 195);
-    --primary-foreground: oklch(0.98 0 0);
-    --secondary: oklch(0.942 0.015 200);
-    --secondary-foreground: oklch(0.18 0.015 200);
-    --muted: oklch(0.952 0.01 200);
-    --muted-foreground: oklch(0.45 0.015 200);
-    --accent: oklch(0.932 0.02 195);
-    --accent-foreground: oklch(0.18 0.015 200);
+    --primary-foreground: oklch(0.98 0.005 95);
+    --secondary: oklch(0.948 0.007 95);
+    --secondary-foreground: oklch(0.2 0.008 200);
+    --muted: oklch(0.952 0.007 95);
+    --muted-foreground: oklch(0.49 0.01 200);
+    --accent: oklch(0.94 0.008 95);
+    --accent-foreground: oklch(0.2 0.008 200);
     --destructive: oklch(0.55 0.22 25);
     --destructive-foreground: oklch(0.98 0 0);
-    --border: oklch(0.902 0.01 200);
-    --input: oklch(0.962 0.01 200);
+    --border: oklch(0.9 0.008 95);
+    --input: oklch(0.99 0.004 95);
     --ring: oklch(0.5 0.14 195);
-    --radius: 0.375rem;
+    --radius: 0.125rem;
+
+    /* The bands (header, hero, methodology, builders, footer): a stone tone set against the paper in light,
+       near-black in dark, so sections alternate in both themes. */
+    --band: oklch(0.948 0.008 95);
+    --band-raised: oklch(0.988 0.004 95);
+    --band-foreground: oklch(0.2 0.008 200);
+    --band-muted: oklch(0.47 0.01 200);
+    --band-border: oklch(0.88 0.008 95);
+    --band-accent: oklch(0.5 0.14 195);
+    --hero: oklch(0.955 0.01 95);
+    --signal: oklch(0.6 0.2 30);
 
     /* Grade scale, A strong → E fragile. Fixed across themes in hue; lightness tuned per theme for AA on cards. */
     --grade-a: oklch(0.5 0.13 150);
@@ -36,27 +47,35 @@
   }
 
   .dark {
-    /* Dark mode — derived from Signal Teal (see brand.md) */
-    --background: oklch(0.13 0.015 200);
-    --foreground: oklch(0.96 0.01 200);
-    --card: oklch(0.18 0.02 200);
-    --card-foreground: oklch(0.96 0.01 200);
-    --popover: oklch(0.2 0.02 200);
-    --popover-foreground: oklch(0.96 0.01 200);
-    --primary: oklch(0.74 0.14 195);
-    --primary-foreground: oklch(0.1 0 0);
-    --secondary: oklch(0.22 0.03 200);
-    --secondary-foreground: oklch(0.96 0.01 200);
-    --muted: oklch(0.2 0.02 200);
-    --muted-foreground: oklch(0.66 0.01 200);
-    --accent: oklch(0.24 0.03 195);
-    --accent-foreground: oklch(0.96 0.01 200);
+    --background: oklch(0.145 0.01 200);
+    --foreground: oklch(0.95 0.01 100);
+    --card: oklch(0.19 0.013 200);
+    --card-foreground: oklch(0.95 0.01 100);
+    --popover: oklch(0.21 0.015 200);
+    --popover-foreground: oklch(0.95 0.01 100);
+    --primary: oklch(0.76 0.14 194);
+    --primary-foreground: oklch(0.14 0.01 200);
+    --secondary: oklch(0.22 0.015 200);
+    --secondary-foreground: oklch(0.95 0.01 100);
+    --muted: oklch(0.2 0.013 200);
+    --muted-foreground: oklch(0.71 0.01 200);
+    --accent: oklch(0.24 0.018 195);
+    --accent-foreground: oklch(0.95 0.01 100);
     /* Darker than the usual 0.65 lightness so white text on it passes AA. */
     --destructive: oklch(0.55 0.21 25);
     --destructive-foreground: oklch(0.98 0 0);
-    --border: oklch(0.26 0.02 200);
-    --input: oklch(0.18 0.02 200);
-    --ring: oklch(0.74 0.14 195);
+    --border: oklch(0.27 0.015 200);
+    --input: oklch(0.17 0.012 200);
+    --ring: oklch(0.76 0.14 194);
+
+    --band: oklch(0.11 0.008 200);
+    --band-raised: oklch(0.16 0.012 200);
+    --band-foreground: oklch(0.95 0.012 100);
+    --band-muted: oklch(0.72 0.01 200);
+    --band-border: oklch(0.27 0.015 200);
+    --band-accent: oklch(0.8 0.13 192);
+    --hero: oklch(0.13 0.012 200);
+    --signal: oklch(0.64 0.19 30);
 
     --grade-a: oklch(0.76 0.14 150);
     --grade-b: oklch(0.8 0.12 125);
@@ -67,8 +86,9 @@
 }
 
 @theme {
-  /* Typography: Inter for UI and reading, JetBrains Mono for numbers, tickers and addresses.
-     Both are self-hosted via @fontsource-variable (imported in main.tsx). */
+  /* Newsreader for the editorial headlines, Inter for UI and reading, JetBrains Mono for numbers, tickers and
+     addresses. All three are self-hosted via @fontsource-variable (imported in main.tsx). */
+  --font-display: "Newsreader Variable", "Newsreader", ui-serif, Georgia, serif;
   --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
@@ -93,12 +113,20 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-band: var(--band);
+  --color-band-raised: var(--band-raised);
+  --color-band-foreground: var(--band-foreground);
+  --color-band-muted: var(--band-muted);
+  --color-band-border: var(--band-border);
+  --color-band-accent: var(--band-accent);
+  --color-hero: var(--hero);
+  --color-signal: var(--signal);
   --color-grade-a: var(--grade-a);
   --color-grade-b: var(--grade-b);
   --color-grade-c: var(--grade-c);
   --color-grade-d: var(--grade-d);
   --color-grade-e: var(--grade-e);
-  --radius-sm: calc(var(--radius) - 2px);
+  --radius-sm: 0px;
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
 }
@@ -109,6 +137,12 @@
   }
   html {
     color-scheme: light;
+  }
+  /* in-page anchors (methodology headings, #board) land below the sticky header */
+  @media (min-width: 40rem) {
+    html {
+      scroll-padding-top: calc(var(--header-h, 4rem) + 1rem);
+    }
   }
   html.dark {
     color-scheme: dark;
@@ -125,27 +159,141 @@
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
+.band :focus-visible {
+  outline-color: var(--band-accent);
+}
 
+/* ── type ──────────────────────────────────────────────────────────────────────────────────────── */
+/* The editorial headline: a light serif at display size, set tight. */
+@utility display {
+  font-family: var(--font-display);
+  font-weight: 320;
+  font-variation-settings: "opsz" 72;
+  letter-spacing: -0.028em;
+  line-height: 1.04;
+  text-wrap: balance;
+}
+/* "• Section": the small label above a headline. */
+@utility eyebrow {
+  @apply inline-flex items-center gap-2 text-[0.8125rem] font-medium text-muted-foreground;
+  &::before {
+    content: "";
+    @apply size-1.5 rounded-full bg-primary;
+  }
+}
+
+/* ── surfaces ──────────────────────────────────────────────────────────────────────────────────── */
+/* A full-width band. Text inside uses the band tokens. */
+@utility band {
+  @apply bg-band text-band-foreground;
+}
+
+/* ── links and buttons: square, with a long arrow that leans in on hover ──────────────────────── */
 @utility link {
   @apply rounded-sm font-medium text-primary underline decoration-primary/40 underline-offset-4 transition-colors hover:decoration-primary;
 }
 @utility link-muted {
   @apply rounded-sm underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-muted-foreground;
 }
+@utility btn-primary {
+  @apply inline-flex min-h-12 items-center justify-between gap-6 bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-foreground/85;
+}
+@utility btn-cream {
+  @apply inline-flex min-h-12 items-center justify-between gap-6 bg-band-foreground px-5 text-sm font-medium text-band transition-colors hover:bg-band-foreground/85;
+}
+@utility btn-arrow {
+  @apply inline-flex min-h-12 items-center gap-3 text-sm font-medium transition-colors;
+}
 @utility btn-secondary {
-  @apply inline-flex min-h-10 items-center gap-2 rounded-md border bg-secondary px-4 text-sm font-medium text-secondary-foreground transition-colors hover:bg-accent;
+  @apply inline-flex min-h-10 items-center gap-2 border bg-card px-4 text-sm font-medium text-card-foreground transition-colors hover:bg-accent;
 }
 @utility btn-ghost {
-  @apply inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
+  @apply inline-flex min-h-10 items-center gap-2 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
 }
 @utility btn-icon {
-  @apply inline-flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
+  @apply inline-flex size-10 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
 }
 @utility input {
-  @apply min-h-10 rounded-md border bg-input px-3 text-sm text-foreground placeholder:text-muted-foreground;
+  @apply min-h-10 border bg-input px-3 text-sm text-foreground placeholder:text-muted-foreground;
+}
+.arrow-lean {
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+:where(a, button):hover .arrow-lean {
+  transform: translateX(4px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .arrow-lean {
+    transition: none;
+  }
 }
 
-/* The methodology and API pages: long-form reading, rendered from docs/. */
+/* ── the hero's centrepiece: the ribbons stir in a light breeze ───────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .ribbon-flutter {
+    transform-box: fill-box;
+    transform-origin: 0% 50%;
+    animation: ribbon-flutter 3.6s ease-in-out infinite;
+  }
+  .ribbon-flutter-late {
+    animation-delay: -1.3s;
+  }
+  @keyframes ribbon-flutter {
+    0%,
+    100% {
+      transform: skewY(0deg) scaleX(1);
+    }
+    35% {
+      transform: skewY(-2.4deg) scaleX(1.015);
+    }
+    70% {
+      transform: skewY(1.6deg) scaleX(0.99);
+    }
+  }
+  .live-dot {
+    animation: live-dot 2s ease-in-out infinite;
+  }
+  @keyframes live-dot {
+    50% {
+      opacity: 0.35;
+    }
+  }
+}
+
+/* ── the live grade ticker under the hero: drifts, pauses under the pointer or focus ─────────────── */
+.ticker-window {
+  mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ticker-track {
+    animation: ticker 110s linear infinite;
+  }
+  .ticker:hover .ticker-track,
+  .ticker:focus-within .ticker-track {
+    animation-play-state: paused;
+  }
+  @keyframes ticker {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+}
+
+/* ── FAQ and accordions: native <details>, a dot that fills when open ─────────────────────────── */
+.faq summary {
+  list-style: none;
+}
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+.faq summary .faq-dot {
+  @apply size-1.5 rounded-full border border-current transition-colors;
+}
+.faq[open] summary .faq-dot {
+  @apply border-primary bg-primary;
+}
+
+/* ── long-form reading: the methodology and API pages, rendered from docs/ ────────────────────── */
 @layer components {
   .prose {
     @apply text-base leading-7;
@@ -154,10 +302,15 @@
     @apply mt-5;
   }
   .prose h1 {
-    @apply text-3xl font-semibold tracking-tight text-balance;
+    @apply font-display text-5xl font-light tracking-tight text-balance;
+    font-variation-settings: "opsz" 72;
+    letter-spacing: -0.028em;
+    line-height: 1.04;
   }
   .prose h2 {
-    @apply mt-12 scroll-mt-6 border-t pt-8 text-xl font-semibold tracking-tight;
+    @apply mt-14 scroll-mt-6 border-t pt-10 font-display text-3xl font-light tracking-tight;
+    font-variation-settings: "opsz" 48;
+    letter-spacing: -0.02em;
   }
   .prose h3 {
     @apply mt-8 scroll-mt-6 text-lg font-semibold;
@@ -179,13 +332,13 @@
     @apply list-decimal space-y-2 pl-6;
   }
   .prose code {
-    @apply rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.875em];
+    @apply bg-muted px-1 py-0.5 font-mono text-[0.875em];
   }
   .prose pre {
-    @apply overflow-x-auto rounded-lg border bg-muted px-4 py-3 text-sm leading-6;
+    @apply overflow-x-auto border bg-card px-4 py-3 text-sm leading-6;
   }
   .prose pre code {
-    @apply rounded-none bg-transparent p-0 text-[0.8125rem];
+    @apply bg-transparent p-0 text-[0.8125rem];
   }
   .prose blockquote {
     @apply border-l-2 border-primary pl-4 text-muted-foreground;
@@ -194,7 +347,7 @@
     @apply my-10;
   }
   .prose .table-scroll {
-    @apply overflow-x-auto rounded-lg border bg-card;
+    @apply overflow-x-auto border bg-card;
   }
   .prose table {
     @apply w-full border-collapse text-sm;
