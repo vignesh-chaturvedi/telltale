@@ -20,6 +20,7 @@ Core markets use their ticker: `BTC`, `HYPE`. Markets listed by other deployers 
 | `/api/markets/{coin}` | One market: every metric, the grade with its reasons, 24 hours of history, recent alerts |
 | `/api/dexes/{slug}` | One DEX and its markets. The slug is the DEX name, or `core` for Hyperliquid's own markets |
 | `/api/alerts` | Recent alerts, newest first |
+| `/api/track-record` | Every public warning, and how volatile the hour after it was |
 | `/api/badge/{coin}.svg` | The market's grade as an image to embed |
 | `/api/health` | Whether the data is fresh |
 
@@ -144,6 +145,49 @@ Unknown or delisted markets return `404`.
 | `publishedAt` | When it was sent to the alert channels, or `null` if it wasn't |
 
 What triggers each kind, and at what threshold, is in [the methodology](https://telltale.markets/methodology#alerts).
+
+### `GET /api/track-record`
+
+Every warning and critical alert about one market since alerts went public, measured an hour after it started. How the measure works is in [the methodology](https://telltale.markets/methodology#track-record).
+
+```json
+{
+  "public": true,
+  "generatedAt": 1791538662854,
+  "liveSince": 1790756917775,
+  "alertsSince": 1790946147000,
+  "topRank": 0.9,
+  "totals": { "alerts": 79, "measured": 72, "followed": 24, "controlHours": 181, "controlFollowed": 19, "pending": 0 },
+  "kinds": [
+    { "kind": "pulled-wall", "alerts": 41, "measured": 41, "followed": 7, "controlHours": 104, "controlFollowed": 9 }
+  ],
+  "recent": [
+    {
+      "id": 363,
+      "kind": "oi-surge",
+      "coin": "xyz:SOFTBANK",
+      "severity": "warning",
+      "startedAt": 1791504420000,
+      "title": "Open interest up 40% in 15 minutes",
+      "movePct": 2.46,
+      "usualPct": 0.3,
+      "rank": 0.985
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `totals.alerts` | Warnings and critical alerts about one market since `alertsSince` |
+| `totals.measured` | Those whose next hour could be ranked |
+| `totals.followed` | Measured alerts whose next hour ranked at or above `topRank` among the market's hours over the 7 days before |
+| `totals.controlHours`, `controlFollowed` | The same time of day on the 3 days before each measured alert, ranked the same way: how often a top hour turns up anyway |
+| `totals.pending` | Alerts whose hour isn't over yet, or hasn't been measured |
+| `kinds` | The same counts for each kind of alert, most frequent first |
+| `recent` | The 6 latest measured alerts, hits and misses alike. `movePct` is the largest move from the alert's price within the hour, `usualPct` the market's median hour, `rank` the share of its hours that moved less |
+
+Until alerts are public it returns `{ "public": false }`.
 
 ### `GET /api/badge/{coin}.svg`
 

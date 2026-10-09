@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { age, bps, count, percent, price, score, usd } from "../src/lib/format.ts";
+import { age, bps, count, multiple, percent, price, score, usd, wholePercent } from "../src/lib/format.ts";
 
 const d = (f: { display: string }) => f.display;
 
@@ -63,4 +63,15 @@ test("basis points, counts, scores and ages", () => {
   assert.equal(age(29), "29 s");
   assert.equal(age(600), "10 min");
   assert.equal(age(7200), "2 h");
+});
+
+test("headline shares are whole percents, and multiples have one decimal", () => {
+  assert.equal(wholePercent(24 / 72).display, "33%");
+  assert.equal(wholePercent(0).display, "0%");
+  assert.equal(wholePercent(0.004).display, "<1%");
+  assert.equal(wholePercent(1).display, "100%");
+  assert.equal(wholePercent(null).display, "--");
+  assert.equal(multiple(0.333 / 0.105).display, "3.2×");
+  assert.equal(multiple(Infinity).display, "--");
+  assert.equal(multiple(3).ariaLabel, "3.0 times");
 });

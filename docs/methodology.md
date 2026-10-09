@@ -125,6 +125,22 @@ Grades describe a market over the last hour. Alerts report conditions as they ha
 
 **Calibration.** The minute alerts were first replayed over 21 hours of September 2026 data from all 329 markets. All eight then ran for 24 hours on live data before going public, recorded but not shown or sent. With the thresholds above, that comes to about 10 warnings a day across all markets, plus about 14 information alerts that stay on the site.
 
+## Track record
+
+The home page checks every warning against what happened next, so the alerts can be judged by their results rather than by examples picked afterwards.
+
+**What's counted.** Every warning and critical alert about one market since alerts went public on October 2, 2026. Information alerts aren't sent anywhere, and alerts about a whole DEX have no single price to follow, so neither counts.
+
+**The measure.** An hour after an alert starts, Telltale takes the market's mid price at the alert's minute and finds the largest move from it, up or down, over the next 60 minutes. That move is ranked against the same measure for the market's own hours over the 7 days before the alert, one hour starting every 15 minutes, all of them over before the alert's hour begins. An hour at or above the 90th percentile is one of the market's most volatile tenth.
+
+**The comparison.** Some hours are busier for everyone: a stock market opening, a data release. So the same time of day on each of the 3 days before the alert is ranked the same way, each against its own previous week. If alerts meant nothing, the hours after them would land in the top tenth about as often as those control hours do.
+
+**When an hour can't be ranked.** It needs a mid price for at least 40 of its 60 minutes, and the market needs at least 96 baseline hours, about a day of history. Alerts that fall short are counted as warnings but left out of the shares, and the home page says how many. The comparison only appears once 20 warnings have been measured.
+
+**What it doesn't show.** A volatile hour after a warning is not the same as a warning that came first. Some alerts fire because a market is already moving (a mark price pulling away from its oracle, an oracle that stops updating mid-move), so part of what follows is the same move carrying on. The record shows that warnings mark the hours that matter. It doesn't claim they predict which way a price will go, or by how much. Groups of a few alerts of one kind swing a lot, so the breakdown by kind is rough.
+
+Each alert is measured once, when its hour is over, and the result is stored. The record keeps every alert even after the minute bars it came from are rolled up. It's available as JSON at [`/api/track-record`](/developers#get-api-track-record).
+
 ## Replays
 
 To check whether the alerts would have helped, Telltale replays past losses through the same detector code the live site runs. The data comes from two public archives on AWS S3: Hyperliquid's own (per-minute oracle, mark and open interest for every market, and order books from 2025) and Hydromancer's Reservoir (order books once a minute from December 2025, and every fill, including liquidations).
@@ -148,6 +164,8 @@ Both archives keep only the 20 best price levels on each side, about ±0.2% of t
 - **Peers are matched by exact ticker only.** Two listings of the same index under different names (such as an S&P 500 index and S&P 500 futures) aren't compared, because a futures basis would look like disagreement.
 
 ## Changes
+
+- Track record (October 9, 2026): every public warning is measured an hour after it starts, against the market's own week and the same hour on the 3 days before.
 
 - Replays (October 2, 2026): POPCAT and FARTCOIN replayed through the live detectors, with a depth check for the archives' partial order books.
 

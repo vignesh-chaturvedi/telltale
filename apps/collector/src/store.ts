@@ -5,9 +5,10 @@ import type { BarInput, Severity, Signal, WallEvent } from "@telltale/detectors"
 import type { Candle, WsGap } from "@telltale/hl";
 import type { MinuteBar } from "./bars.ts";
 import { BAR_COLUMNS } from "./scoring.ts";
+import type { MidSeries, Outcome } from "./track.ts";
 import { dexConfig, type Universe } from "./universe.ts";
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** Version 1: the Phase 1 schema. Later versions are applied by MIGRATIONS. */
 export const SCHEMA_V1 = `
@@ -179,6 +180,19 @@ const MIGRATIONS = [
   );
   CREATE INDEX book_events_ts ON book_events (ts);
   CREATE INDEX book_events_coin ON book_events (coin, ts);
+  `,
+  // The track record: the hour after each warning, measured once it's over (see track.ts). A null
+  // move means the hour couldn't be measured. Kept forever, unlike the minute bars it comes from.
+  `
+  CREATE TABLE alert_outcomes (
+    alert_id INTEGER PRIMARY KEY,
+    measured_at INTEGER NOT NULL,
+    move_pct REAL,
+    usual_pct REAL,
+    rank REAL,
+    baseline_hours INTEGER,
+    control_ranks TEXT NOT NULL
+  );
   `,
 ];
 
@@ -429,6 +443,30 @@ export class Store {
     this.transaction(() => {
       for (const e of events) insert.run(e.coin, e.at, e.kind, e.side, e.px, e.peakUsd, e.sideDepthUsd, e.filledUsd, e.firstSeen);
     });
+  }
+
+  /** Warnings and critical alerts about one market, started at or before `before`, with no outcome yet; oldest first. */
+  alertsToMeasure(before: number, limit: number): { id: number; coin: string; startedAt: number }[] {
+    return this.db
+      .prepare(
+        `SELECT a.id, a.coin, a.started_at AS startedAt FROM alerts a LEFT JOIN alert_outcomes o ON o.alert_id = a.id
+         WHERE o.alert_id IS NULL AND a.coin IS NOT NULL AND a.severity IN ('warning', 'critical') AND a.started_at <= ?
+         ORDER BY a.started_at, a.id LIMIT ?`,
+      )
+      .all(before, limit) as unknown as { id: number; coin: string; startedAt: number }[];
+  }
+
+  /** A market's mid price by minute, from `from` to `to` inclusive. */
+  midSeries(coin: string, from: number, to: number): MidSeries {
+    const rows = this.db.prepare("SELECT ts, mid_px AS px FROM minute_bars WHERE coin = ? AND ts BETWEEN ? AND ? AND mid_px IS NOT NULL").all(coin, from, to);
+    return new Map(rows.map((r) => [r.ts as number, r.px as number]));
+  }
+
+  /** Stores an alert's outcome; `null` records that it couldn't be measured, so it isn't tried again. */
+  writeOutcome(alertId: number, measuredAt: number, o: Outcome | null): void {
+    this.db
+      .prepare("INSERT OR REPLACE INTO alert_outcomes VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(alertId, measuredAt, o?.movePct ?? null, o?.usualPct ?? null, o?.rank ?? null, o?.baselineHours ?? null, JSON.stringify(o?.controlRanks ?? []));
   }
 
   writeGap(gap: WsGap): void {

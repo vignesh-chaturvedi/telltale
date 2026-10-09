@@ -15,6 +15,7 @@ import { RollingNumber } from "../components/RollingNumber.tsx";
 import { ScrollWords } from "../components/ScrollWords.tsx";
 import { EmptyState, ErrorState, Loading, Skeleton } from "../components/States.tsx";
 import { Ticker } from "../components/Ticker.tsx";
+import { TrackRecordSection } from "../components/TrackRecord.tsx";
 import { ButtonLink, Container, Eyebrow, Headline, Reveal } from "../components/ui.tsx";
 import { dexPath, useApi, type AlertList, type Board as BoardData, type BoardDex, type BoardMarket, type ReplaySummary } from "../lib/api.ts";
 import { count, usd } from "../lib/format.ts";
@@ -61,6 +62,7 @@ export function Board() {
       </section>
       <Method />
       <AlertsSection data={alerts.data} loading={alerts.loading} />
+      <TrackRecordSection />
       <ReplaysSection />
       <Builders />
       <Faq />

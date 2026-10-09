@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { Api } from "../src/api.ts";
-import type { AlertList, Board, DexDetail, Health, MarketDetail } from "../src/api-types.ts";
+import type { AlertList, Board, DexDetail, Health, MarketDetail, TrackRecord, TrackRecordResponse } from "../src/api-types.ts";
 import { Store } from "../src/store.ts";
 import { T, seededStore } from "./seed.ts";
 
@@ -191,5 +191,28 @@ test("alerts stay off the site until they're made public", async () => {
   } finally {
     server3.close();
     later.close();
+  }
+});
+
+test("the track record counts public warnings and what followed each one", async () => {
+  assert.deepEqual((await get<TrackRecordResponse>("/api/track-record")).body, { public: false });
+
+  // The BTC warning's hour was measured; the ETH warning's hour isn't over yet.
+  const store = new Store(join(dir, "t.db"));
+  store.writeOutcome(2, now, { movePct: 3.2, usualPct: 0.4, rank: 0.97, baselineHours: 669, controlRanks: [0.2, 0.95, 0.5] });
+  store.close();
+  const open = new Api({ dbPath: join(dir, "t.db"), windowMinutes: 30, webRoot: null, now: () => now, alertsPublic: true });
+  open.refresh();
+  const server2 = createServer(open.handle);
+  await new Promise<void>((resolve) => server2.listen(0, "127.0.0.1", resolve));
+  try {
+    const body = (await (await fetch(`http://127.0.0.1:${(server2.address() as AddressInfo).port}/api/track-record`)).json()) as TrackRecord;
+    assert.equal(body.public, true);
+    assert.deepEqual(body.totals, { alerts: 2, measured: 1, followed: 1, controlHours: 3, controlFollowed: 1, pending: 1 }, "info alerts don't count");
+    assert.deepEqual(body.recent.map((r) => [r.coin, r.movePct, r.usualPct, r.rank]), [["BTC", 3.2, 0.4, 0.97]]);
+    assert.equal(body.liveSince, 0, "the seed adds markets first seen at 0");
+  } finally {
+    server2.close();
+    open.close();
   }
 });

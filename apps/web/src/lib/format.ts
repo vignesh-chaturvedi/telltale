@@ -126,6 +126,28 @@ export function percent(share: number | null | undefined): Formatted {
   return { display, raw, ariaLabel: `${display.replace("%", "")} percent` };
 }
 
+/**
+ * A headline share of a small sample, in whole percent (0.333 → "33%"). Decimals would claim a
+ * precision that a few dozen alerts don't have.
+ */
+export function wholePercent(share: number | null | undefined): Formatted {
+  const v = clean(share === null || share === undefined ? share : share * 100);
+  if (v === null) return none;
+  const raw = toDecimalString(v);
+  if (v === 0) return { display: "0%", raw, ariaLabel: "0 percent" };
+  if (Math.abs(v) < 0.5) return { display: "<1%", raw, ariaLabel: "less than 1 percent" };
+  const n = Math.round(v);
+  return { display: `${n}%`, raw, ariaLabel: `${n} percent` };
+}
+
+/** How many times as often or as large: one decimal, "3.2×". */
+export function multiple(value: number | null | undefined): Formatted {
+  const v = clean(value);
+  if (v === null) return none;
+  const n = round(v, 1).toFixed(1);
+  return { display: `${n}×`, raw: toDecimalString(v), ariaLabel: `${n} times` };
+}
+
 /** Basis points: 1 decimal under 10 bps, none above. */
 export function bps(value: number | null | undefined): Formatted {
   const v = clean(value);

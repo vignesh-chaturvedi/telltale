@@ -15,6 +15,7 @@ import type { AlertSink } from "./alerts.ts";
 import { MINUTE, MinuteAggregator, minuteOf, type MinuteBar } from "./bars.ts";
 import { BOOK_SIG_FIGS, planSubscriptions, type SubscriptionPlan } from "./plan.ts";
 import { Store } from "./store.ts";
+import { TRACK, measureOutcome, outcomeWindow } from "./track.ts";
 import { decodeAllDexsCtxs, isLive, loadUniverse, marketSetChanged, type Universe } from "./universe.ts";
 import { Watch } from "./watch.ts";
 
@@ -44,6 +45,11 @@ const CANDLE_DAYS = 31;
 const CANDLE_SPACING_MS = 3_000;
 const CANDLES_EVERY_MS = 6 * 60 * 60_000;
 const RETENTION_EVERY_MS = 60 * 60_000;
+const OUTCOMES_EVERY_MS = 5 * 60_000;
+/** Each alert reads about 10 days of one market's minute bars, so a run measures a few at a time. */
+const OUTCOMES_PER_RUN = 20;
+/** Waits this long after an alert's hour ends, so its last minute bar is written. */
+const OUTCOME_DELAY_MS = (TRACK.hourMinutes + 3) * 60_000;
 
 export const DEFAULTS = {
   bookStreams: 300,
@@ -115,6 +121,7 @@ export class Collector {
     this.every("universe", this.options.universeEveryMs, () => this.refreshUniverse());
     this.every("candles", CANDLES_EVERY_MS, () => this.refreshCandles(), 10_000);
     this.every("retention", RETENTION_EVERY_MS, async () => this.applyRetention(), 5 * 60_000);
+    this.every("outcomes", OUTCOMES_EVERY_MS, async () => this.measureOutcomes(), 2 * 60_000);
     void this.pollNextBook();
     this.scheduleFlush();
   }
@@ -273,6 +280,20 @@ export class Collector {
     const { keepMinuteDays, log } = this.options;
     const { minuteBars, rolledBars } = this.store.rollUp(Date.now() - keepMinuteDays * 86_400_000);
     if (minuteBars) log(`retention: rolled ${minuteBars} minute bars older than ${keepMinuteDays} days into ${rolledBars} 15-minute bars`);
+  }
+
+  /** Measures the hour after each warning once it's over, for the track record. */
+  private measureOutcomes(): void {
+    const now = Date.now();
+    const due = this.store.alertsToMeasure(now - OUTCOME_DELAY_MS, OUTCOMES_PER_RUN);
+    let measured = 0;
+    for (const a of due) {
+      const { from, to } = outcomeWindow(a.startedAt);
+      const outcome = measureOutcome(this.store.midSeries(a.coin, from, to), a.startedAt);
+      this.store.writeOutcome(a.id, now, outcome);
+      if (outcome) measured++;
+    }
+    if (due.length) this.options.log(`track record: measured ${measured} of ${due.length} alerts`);
   }
 
   /** Fetches 31 daily candles for every live market, one market at a time. */

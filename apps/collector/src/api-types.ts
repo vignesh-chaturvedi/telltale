@@ -115,3 +115,52 @@ export interface AlertList {
   public: boolean;
   alerts: AlertView[];
 }
+
+/** Track-record counts for one kind of alert, or for all of them. */
+export interface TrackKind {
+  kind: AlertKind;
+  /** Warnings and critical alerts about one market since alerts went public. */
+  alerts: number;
+  /** Those whose next hour could be measured. */
+  measured: number;
+  /** Measured alerts whose next hour was one of the market's most volatile tenth. */
+  followed: number;
+  /** The same hour on the 3 days before each measured alert, ranked the same way. */
+  controlHours: number;
+  controlFollowed: number;
+}
+
+/** A measured alert: how far the price moved in the hour after it. */
+export interface TrackAlert {
+  id: number;
+  kind: AlertKind;
+  coin: string;
+  severity: Severity;
+  startedAt: number;
+  title: string;
+  /** Largest move from the alert's price within the hour, in percent. */
+  movePct: number;
+  /** The market's median hour over the 7 days before, measured the same way, in percent. */
+  usualPct: number;
+  /** Share of those hours that moved less, 0 to 1. */
+  rank: number;
+}
+
+export interface TrackRecord {
+  public: true;
+  generatedAt: number;
+  /** When the collector first saw a market, epoch ms. */
+  liveSince: number | null;
+  /** Alerts are counted from here, when they went public. */
+  alertsSince: number;
+  /** An hour at or above this rank counts as one of the market's most volatile tenth. */
+  topRank: number;
+  /** `pending` alerts are waiting for their hour to end. */
+  totals: Omit<TrackKind, "kind"> & { pending: number };
+  kinds: TrackKind[];
+  /** The latest measured alerts, newest first, hits and misses alike. */
+  recent: TrackAlert[];
+}
+
+/** Until alerts are public, the track record is `{ public: false }`. */
+export type TrackRecordResponse = TrackRecord | { public: false };

@@ -3,10 +3,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { GRADES, type Grade } from "@telltale/detectors";
-import type { AlertList, AlertView, Board, BoardDex, BoardMarket, DexDetail, Health, HistoryPoint, MarketDetail } from "./api-types.ts";
+import type { AlertList, AlertView, Board, BoardDex, BoardMarket, DexDetail, Health, HistoryPoint, MarketDetail, TrackRecord } from "./api-types.ts";
 import { badgeSvg, type BadgeState } from "./badge.ts";
 import { scoreDatabase, type ScoredMarket, type Scorecard } from "./scoring.ts";
 import { toAlert } from "./store.ts";
+import { summarizeTrack, type TrackRow } from "./track.ts";
 
 export interface ApiOptions {
   dbPath: string;
@@ -73,6 +74,7 @@ export class Api {
   private readonly db: DatabaseSync;
   private card: Scorecard | null = null;
   private board: Board | null = null;
+  private track: TrackRecord | null = null;
 
   constructor(options: ApiOptions) {
     this.options = { staleAfterSeconds: 180, alertsPublic: false, alertsSince: 0, now: Date.now, ...options, webRoot: options.webRoot ? resolve(options.webRoot) : null };
@@ -96,6 +98,7 @@ export class Api {
       dexes,
       markets: card.markets.map(toRow),
     };
+    this.track = this.trackRecord(generatedAt);
   }
 
   close(): void {
@@ -123,6 +126,10 @@ export class Api {
   private api(path: string, query: URLSearchParams, res: ServerResponse): void {
     if (path === "/api/health") return this.send(res, 200, this.health(), "no-store");
     if (path === "/api/alerts") return this.send(res, 200, this.alertList(query));
+    if (path === "/api/track-record") {
+      if (!this.options.alertsPublic) return this.send(res, 200, { public: false });
+      return this.track ? this.send(res, 200, this.track) : this.send(res, 503, { error: "The track record hasn't been computed yet." });
+    }
     if (!this.card || !this.board) return this.send(res, 503, { error: "The scorecard hasn't been computed yet." });
     if (path === "/api/board") return this.send(res, 200, this.board);
 
@@ -197,6 +204,46 @@ export class Api {
       // The collector creates the table; until it has, there's nothing to show.
       return [];
     }
+  }
+
+  /** Every public warning about one market, with what followed it (see track.ts). */
+  private trackRecord(generatedAt: number): TrackRecord | null {
+    if (!this.options.alertsPublic) return null;
+    const liveSince = (this.db.prepare("SELECT min(first_seen) AS t FROM markets").get() as { t: number | null }).t;
+    let rows: TrackRow[] = [];
+    try {
+      rows = this.db
+        .prepare(
+          `SELECT a.id, a.kind, a.coin, a.severity, a.started_at AS startedAt, a.title, o.alert_id AS measured, o.move_pct AS movePct,
+             o.usual_pct AS usualPct, o.rank, o.baseline_hours AS baselineHours, o.control_ranks AS controlRanks
+           FROM alerts a LEFT JOIN alert_outcomes o ON o.alert_id = a.id
+           WHERE a.coin IS NOT NULL AND a.severity IN ('warning', 'critical') AND a.started_at >= ?`,
+        )
+        .all(this.options.alertsSince)
+        .map((r) => ({
+          id: r.id as number,
+          kind: r.kind as TrackRow["kind"],
+          coin: r.coin as string,
+          severity: r.severity as TrackRow["severity"],
+          startedAt: r.startedAt as number,
+          title: r.title as string,
+          outcome:
+            r.measured === null
+              ? undefined
+              : r.movePct === null
+                ? null
+                : {
+                    movePct: r.movePct as number,
+                    usualPct: r.usualPct as number,
+                    rank: r.rank as number,
+                    baselineHours: r.baselineHours as number,
+                    controlRanks: JSON.parse(r.controlRanks as string) as number[],
+                  },
+        }));
+    } catch {
+      // The collector creates the outcomes table; until it has, nothing is measured.
+    }
+    return summarizeTrack(rows, { generatedAt, liveSince, alertsSince: this.options.alertsSince });
   }
 
   private marketDetail(coin: string): MarketDetail | null {
