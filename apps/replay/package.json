@@ -1,6 +1,6 @@
 {
   "name": "@telltale/replay",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
   "description": "Replays past Hyperliquid incidents through the live detectors, from public archives.",

@@ -1,6 +1,6 @@
 {
   "name": "@telltale/collector",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
   "description": "Streams Hyperliquid market data, grades every market, sends alerts and serves the JSON API.",
