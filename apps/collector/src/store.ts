@@ -199,8 +199,9 @@ const MIGRATIONS = [
 export const ROLLUP_MS = 15 * 60_000;
 
 // Integer division buckets each minute into its quarter hour. The literal keeps it integer
-// arithmetic, since bound JS numbers arrive as REAL.
-const ROLLUP_SQL = `
+// arithmetic, since bound JS numbers arrive as REAL. INDEXED BY: without statistics the planner
+// scans all of minute_bars (6.7M rows, minutes of blocked collector) instead of the hour it rolls up.
+export const ROLLUP_SQL = `
 WITH agg AS (
   SELECT coin, (ts / ${ROLLUP_MS}) * ${ROLLUP_MS} AS bucket, MAX(ts) AS last_ts, COUNT(*) AS minutes,
     MAX(mid_px) AS mid_high, MIN(mid_px) AS mid_low,
@@ -211,7 +212,7 @@ WITH agg AS (
     ROUND(AVG(bid_depth_5)) AS bid_depth_5, ROUND(AVG(ask_depth_5)) AS ask_depth_5,
     MIN(min_depth_2) AS min_depth_2, SUM(trades) AS trades, SUM(buy_ntl) AS buy_ntl, SUM(sell_ntl) AS sell_ntl,
     MAX(max_trade_ntl) AS max_trade_ntl
-  FROM minute_bars WHERE ts < :cutoff GROUP BY coin, bucket
+  FROM minute_bars INDEXED BY minute_bars_ts WHERE ts < :cutoff GROUP BY coin, bucket
 )
 INSERT OR REPLACE INTO bars_15m
 SELECT a.coin, a.bucket, a.minutes, b.oracle_px, b.mark_px, b.mid_px, a.mid_high, a.mid_low, b.open_interest, b.funding,

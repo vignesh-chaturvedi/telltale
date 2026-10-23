@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { Candle, PerpMeta } from "@telltale/hl";
 import type { MinuteBar } from "../src/bars.ts";
-import { ROLLUP_MS, SCHEMA_V1, SCHEMA_VERSION, Store } from "../src/store.ts";
+import { ROLLUP_MS, ROLLUP_SQL, SCHEMA_V1, SCHEMA_VERSION, Store } from "../src/store.ts";
 import { loadUniverse } from "../src/universe.ts";
 import { fixtureInfo } from "./fixtures.ts";
 
@@ -188,5 +188,13 @@ test("rolls minute bars past the cutoff into 15-minute bars", () => {
   assert.equal((store.db.prepare("SELECT count(*) AS n FROM health").get() as { n: number }).n, 0);
 
   assert.deepEqual(store.rollUp(t0 + 17 * 60_000), { minuteBars: 0, rolledBars: 0 }, "running again changes nothing");
+  store.close();
+});
+
+test("the roll-up reads only the old minutes, through the ts index, not the whole table", () => {
+  const store = new Store(":memory:");
+  const plan = (store.db.prepare(`EXPLAIN QUERY PLAN ${ROLLUP_SQL}`).all({ cutoff: 1_790_000_000_000 }) as { detail: string }[]).map((r) => r.detail);
+  assert.ok(plan.some((d) => d.includes("USING INDEX minute_bars_ts")), plan.join("\n"));
+  assert.ok(!plan.some((d) => d === "SCAN minute_bars"), plan.join("\n"));
   store.close();
 });
