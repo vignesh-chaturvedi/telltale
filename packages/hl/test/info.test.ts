@@ -44,6 +44,22 @@ test("omits the dex field for core metadata and sends it for HIP-3", async () =>
   );
 });
 
+test("asks for one account's positions on core or on a HIP-3 DEX, at weight 2", async () => {
+  const { impl, calls } = fakeFetch([
+    { status: 200, body: { assetPositions: [] } },
+    { status: 200, body: null },
+  ]);
+  const limiter = new TokenBucket({ perMinute: 1200, clock: noWait });
+  const client = new InfoClient({ url: "https://api.example", fetch: impl, limiter, clock: noWait });
+  assert.deepEqual(await client.clearinghouseState("0xabc"), { assetPositions: [] });
+  assert.equal(await client.clearinghouseState("0xabc", "nope"), null, "an unknown DEX answers null");
+  assert.deepEqual(
+    calls.map((c) => c.body),
+    [{ type: "clearinghouseState", user: "0xabc" }, { type: "clearinghouseState", user: "0xabc", dex: "nope" }],
+  );
+  assert.equal(limiter.taken, 4);
+});
+
 test("retries rate-limited and server errors, then succeeds", async () => {
   const { impl, calls } = fakeFetch([
     { status: 429, body: "slow down" },

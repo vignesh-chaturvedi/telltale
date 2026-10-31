@@ -7,7 +7,7 @@ Everything on [telltale.markets](https://telltale.markets) comes from a small re
 - **Any site can call it from the browser.** Responses carry `Access-Control-Allow-Origin: *`.
 - **Fresh every minute.** Grades cover the last 60 minutes and are recomputed every minute. Responses are cached for 30 seconds, so polling more than once a minute gets you nothing new.
 - **Times** are epoch milliseconds, in UTC. **Money** is in USD. **Gaps** are in basis points (1 bp = 0.01%).
-- **Versioned rules.** The board, market, DEX and history responses carry `methodologyVersion`, the version of [the methodology](https://telltale.markets/methodology) their numbers follow. It goes up whenever a rule changes.
+- **Versioned rules.** The board, market, DEX, history and wallet responses carry `methodologyVersion`, the version of [the methodology](https://telltale.markets/methodology) their numbers follow. It goes up whenever a rule changes.
 
 ## Market names
 
@@ -20,6 +20,7 @@ Core markets use their ticker: `BTC`, `HYPE`. Markets listed by other deployers 
 | `/api/board` | Every market's grade and headline numbers, plus each DEX's summary |
 | `/api/markets/{coin}` | One market: every metric, the grade with its reasons, 24 hours of history, recent alerts |
 | `/api/markets/{coin}/history` | Every check step by step over 24 hours, 7 days or 30 days, with each one's usual range |
+| `/api/wallets/{address}` | One wallet's open positions, read live from Hyperliquid, each with its market's grade and the book in the way of its liquidation |
 | `/api/dexes/{slug}` | One DEX and its markets. The slug is the DEX name, or `core` for Hyperliquid's own markets |
 | `/api/alerts` | Recent alerts, newest first |
 | `/api/track-record` | Every public warning, and how volatile the hour after it was |
@@ -98,10 +99,11 @@ Everything on the board row, plus:
 
 | Field | Meaning |
 | --- | --- |
-| `metrics` | Every measured number, including the ungraded ones: `depth2Usd`, `thinnestDepth2Usd`, `liquidationDistancePct`, `dailyVolPct`, `oiCapUse`, `oracleUnchangedOver10sShare`, `peers`, `coverageMinutes`, and the experimental `adjustedMoveCostUsd` with the `pullRate` behind it (`rate`, the share of large walls' USD pulled over 14 days, and `walls`, how many ended; `null` under 20) |
+| `metrics` | Every measured number, including the ungraded ones: `markPx`, `depth2Usd`, `sideDepthUsd` (each side's median depth within 1%, 2% and 5%), `thinnestDepth2Usd`, `liquidationDistancePct`, `dailyVolPct`, `oiCapUse`, `oracleUnchangedOver10sShare`, `peers`, `coverageMinutes`, and the experimental `adjustedMoveCostUsd` with the `pullRate` behind it (`rate`, the share of large walls' USD pulled over 14 days, and `walls`, how many ended; `null` under 20) |
 | `grade` | The grade, `score`, `bands`, `reasons` (each with a sentence of `text`) and `notes` (context that isn't graded, such as an oracle that stays still while its underlying market is closed) |
 | `history` | Five-minute steps over 24 hours: `markPx`, `oraclePx`, largest `oracleGapBps`, `depth2Usd`, `oiUsd`. For every check and longer ranges, use `/history` below |
 | `alerts` | The market's 10 latest alerts |
+| `positions` | Experimental, not graded: the positions sample described below. `null` until the collector has read any accounts |
 | `maxLeverage`, `dexName`, `dexSlug` | Market settings and the deployer |
 
 Unknown or delisted markets return `404`.
@@ -140,6 +142,48 @@ Every check step by step, measured the way the grade measures it but over each s
 | `dailyMoves` | The last 30 finished days' largest move from the open, in %, whatever the range: what the big-moves check counts |
 
 A history is cached until the scorecard's next refresh, once a minute.
+
+#### `positions`
+
+Telltale reads the positions of accounts it sees trading, largest first; see [Positions](https://telltale.markets/methodology#positions-experimental) in the methodology. Only reads from the last `freshHours` hours count.
+
+| Field | Meaning |
+| --- | --- |
+| `coverage` | Tracked longs plus shorts (`longUsd + shortUsd`) against twice the open interest, at most 1 |
+| `topShare` | The 10 largest positions' share of all open positions; a lower bound when coverage is below 1 |
+| `accounts`, `longAccounts`, `shortAccounts` | Accounts with a position in the sample |
+| `traders24h` | Distinct accounts that traded the market in the last 24 hours |
+| `largest` | The 10 largest positions: `address`, `side`, `positionUsd`, `liquidationPx`, `distancePct` (how far the mark must move to liquidate it) and `leverage` |
+| `ladder` | 20 rungs of 1% from the mark: `longUsd` and `shortUsd` liquidating between `fromPct` and `toPct`, with account counts. `beyondUsd` is further than 20%, `unliquidatableUsd` has no liquidation price |
+| `worstPush` | For `long` and `short`: the distance within 5% (`pct`) where the tracked positions liquidated (`liquidatedUsd`) are largest against the book in the way (`costUsd`), and their `ratio`; `null` when nothing liquidates within 5% |
+| `nearestCluster` | For `long` and `short`: the closest 1% rung with $1M+ of liquidations, its `usd`, `accounts` and `costUsd` to reach its far edge (`null` past 5%) |
+| `oldestPolledAt`, `newestPolledAt` | When the oldest and newest positions in the sample were read |
+
+### `GET /api/wallets/{address}`
+
+The address is `0x` and 40 hex digits. Each DEX is asked for the wallet's positions, so the answer is live; it's cached for 30 seconds per address, and the positions aren't stored.
+
+```json
+{
+  "address": "0x…",
+  "dexes": [{ "dex": "xyz", "slug": "xyz", "name": "XYZ", "accountUsd": 5000, "positionUsd": 76000 }],
+  "positions": [
+    {
+      "coin": "xyz:SP500", "dex": "xyz", "side": "long", "size": 10, "positionUsd": 76000,
+      "entryPx": 7550, "markPx": 7600, "liquidationPx": 7220, "distancePct": 5, "leverage": 20, "cross": true,
+      "unrealizedPnlUsd": 500, "grade": "B", "graded": true, "pushCostUsd": 9500000, "liquidatedFirstUsd": 1200000
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `dexes` | Each DEX where the wallet has money or positions. `accountUsd` is Hyperliquid's perp account value there; for a unified account it leaves out the spot balances that also back the positions |
+| `distancePct` | How far the mark must move to liquidate the position, %; `null` when the margin covers any price. Liquidation prices are Hyperliquid's own, so they count a unified account's spot balances |
+| `pushCostUsd` | The book in the way of the liquidation price: bids for a long, asks for a short, from the market's median depth within 1%, 2% and 5%. `null` past 5%, or for a market Telltale doesn't grade |
+| `liquidatedFirstUsd` | Other tracked positions on the same side that liquidate before this one, adding to a push |
+| `grade`, `graded` | The market's grade; `graded` is false for a market Telltale doesn't know |
 
 ### `GET /api/alerts`
 
@@ -249,7 +293,7 @@ It reads "not graded" while a market has too little data, and "unknown market" (
 
 ## Errors
 
-Errors are JSON, `{ "error": "No live market named NOPE." }`, with the usual status codes: `400` for a malformed URL or an unknown `range`, `404` for an unknown market, DEX or path, `405` for anything but `GET` and `HEAD`, and `503` for the few seconds after a restart before the first scorecard is ready.
+Errors are JSON, `{ "error": "No live market named NOPE." }`, with the usual status codes: `400` for a malformed URL, an unknown `range` or a malformed wallet address, `404` for an unknown market, DEX or path, `405` for anything but `GET` and `HEAD`, and `503` for the few seconds after a restart before the first scorecard is ready. Wallet lookups can also return `429` when several are already running (try again in a minute), `502` when Hyperliquid didn't answer, and `503` on a self-hosted copy that has them turned off (`WALLET_LOOKUPS=0`).
 
 ## Alert webhooks
 

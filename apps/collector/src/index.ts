@@ -1,4 +1,4 @@
-// Runs the collector: `pnpm collect [--testnet] [--db path] [--minutes n] [--keep-days 14]`.
+// Runs the collector: `pnpm collect [--testnet] [--db path] [--minutes n] [--keep-days 14] [--position-reads 150]`.
 import { parseArgs } from "node:util";
 import { MAINNET, TESTNET } from "@telltale/hl";
 import { Collector, DEFAULTS } from "./collector.ts";
@@ -11,6 +11,7 @@ const { values } = parseArgs({
     minutes: { type: "string" },
     "book-streams": { type: "string", default: String(DEFAULTS.bookStreams) },
     "keep-days": { type: "string", default: String(DEFAULTS.keepMinuteDays) },
+    "position-reads": { type: "string", default: String(DEFAULTS.positionReadsPerMinute) },
   },
 });
 
@@ -22,6 +23,7 @@ const collector = new Collector({
   dbPath: values.db,
   bookStreams: Number(values["book-streams"]),
   keepMinuteDays: Number(values["keep-days"]),
+  positionReadsPerMinute: Number(values["position-reads"]),
   sinks: sinksFromEnv(),
   // Alerts are only sent once ALERTS_PUBLISH=1 is set, after the shadow run.
   publishAlerts: process.env.ALERTS_PUBLISH === "1",

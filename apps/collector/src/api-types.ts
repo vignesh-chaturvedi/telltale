@@ -1,6 +1,6 @@
 // Response shapes of the JSON API. Type-only, so the website can import them without pulling in
 // any server code.
-import type { AlertKind, DexSummary, Grade, MarketGrade, MarketMetrics, MetricKey, Severity } from "@telltale/detectors";
+import type { AlertKind, DexSummary, Grade, MarketGrade, MarketMetrics, MetricKey, PositionMetrics, PositionSide, Severity } from "@telltale/detectors";
 
 /** One market's row on the board: the grade plus the numbers the table shows. */
 export interface BoardMarket {
@@ -145,6 +145,50 @@ export interface MarketDetail {
   history: HistoryPoint[];
   /** This market's latest alerts, newest first; empty until alerts are public. */
   alerts: AlertView[];
+  /** Experimental, not graded: the positions read so far. `null` until the collector has read any. */
+  positions: MarketPositions | null;
+}
+
+/** Concentration and the liquidation map, from accounts seen trading (see docs/methodology.md). */
+export interface MarketPositions extends PositionMetrics {
+  /** Only positions read within this many hours count. */
+  freshHours: number;
+  /** Distinct addresses that traded this market in the last 24 hours. */
+  traders24h: number;
+}
+
+/** One open position in a wallet, read live from Hyperliquid, with the market's grade and depth. */
+export interface WalletPosition {
+  coin: string;
+  dex: string;
+  side: PositionSide;
+  /** Contracts; negative is short. */
+  size: number;
+  positionUsd: number;
+  entryPx: number;
+  markPx: number;
+  liquidationPx: number | null;
+  /** How far the mark must move to liquidate it, %. */
+  distancePct: number | null;
+  leverage: number;
+  cross: boolean;
+  unrealizedPnlUsd: number;
+  /** `null` for a market Telltale doesn't grade (yet). */
+  grade: Grade | null;
+  graded: boolean;
+  /** Book depth between mid and the liquidation price; `null` past the 5% the book is measured to. */
+  pushCostUsd: number | null;
+  /** Other tracked positions on the same side that liquidate first, adding to the push. */
+  liquidatedFirstUsd: number | null;
+}
+
+export interface WalletView {
+  generatedAt: number;
+  methodologyVersion: string;
+  address: string;
+  /** Account value on each DEX with money or positions on it. */
+  dexes: { dex: string; slug: string; name: string; accountUsd: number; positionUsd: number }[];
+  positions: WalletPosition[];
 }
 
 export interface DexDetail {

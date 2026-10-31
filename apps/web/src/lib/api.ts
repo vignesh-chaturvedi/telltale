@@ -13,6 +13,7 @@ export type {
   HistoryRange,
   MarketDetail,
   MarketHistory,
+  MarketPositions,
   MetricPoint,
   MetricSummary,
   SummarizedMetric,
@@ -20,6 +21,8 @@ export type {
   TrackKind,
   TrackRecord,
   TrackRecordResponse,
+  WalletPosition,
+  WalletView,
 } from "@telltale/collector/api-types";
 export type { ReplayAlert, ReplayResult, ReplaySummary } from "@telltale/replay/types";
 

@@ -14,8 +14,10 @@ import { ALERT_HISTORY_MINUTES } from "@telltale/detectors";
 import type { AlertSink } from "./alerts.ts";
 import { MINUTE, MinuteAggregator, minuteOf, type MinuteBar } from "./bars.ts";
 import { BOOK_SIG_FIGS, planSubscriptions, type SubscriptionPlan } from "./plan.ts";
+import { PositionPoller } from "./positions.ts";
 import { Store } from "./store.ts";
 import { TRACK, measureOutcome, outcomeWindow } from "./track.ts";
+import { TraderTally } from "./traders.ts";
 import { decodeAllDexsCtxs, isLive, loadUniverse, marketSetChanged, type Universe } from "./universe.ts";
 import { Watch } from "./watch.ts";
 
@@ -26,6 +28,8 @@ export interface CollectorOptions {
   bookStreams: number;
   /** REST weight budget per minute; Hyperliquid allows 1,200 per IP. */
   restWeightPerMinute: number;
+  /** Account reads per minute for the position sample, 2 weight each, out of `restWeightPerMinute`; 0 turns it off. */
+  positionReadsPerMinute: number;
   /** Refresh DEXs, markets and contexts this often. */
   universeEveryMs: number;
   /** Refresh OI caps on every Nth universe refresh. */
@@ -54,6 +58,7 @@ const OUTCOME_DELAY_MS = (TRACK.hourMinutes + 3) * 60_000;
 export const DEFAULTS = {
   bookStreams: 300,
   restWeightPerMinute: 1000,
+  positionReadsPerMinute: 150,
   universeEveryMs: 60_000,
   limitsEvery: 5,
   keepMinuteDays: 14,
@@ -69,6 +74,8 @@ export class Collector {
   private readonly agg = new MinuteAggregator();
   private readonly store: Store;
   private readonly watch: Watch;
+  private readonly traders = new TraderTally();
+  private readonly positions: PositionPoller;
   private pool: WsPool | null = null;
   private universe: Universe | null = null;
   private plan: SubscriptionPlan | null = null;
@@ -87,6 +94,7 @@ export class Collector {
     this.info = new InfoClient({ url: options.network.api, limiter: this.limiter });
     this.store = new Store(options.dbPath);
     this.watch = new Watch({ alerts: this.store, sinks: options.sinks, publish: options.publishAlerts, log: options.log });
+    this.positions = new PositionPoller({ info: this.info, store: this.store, perMinute: Math.max(1, options.positionReadsPerMinute), log: options.log });
   }
 
   async start(): Promise<void> {
@@ -114,7 +122,8 @@ export class Collector {
     log(
       `${network.name}: ${this.universe.dexes.length} DEXs, ${live} live markets. ` +
         `Streaming contexts for ${this.plan.ctxStreamed.length}, books for ${this.plan.bookStreamed.length}; ` +
-        `polling ${this.plan.bookPolled.length} books. ${this.plan.subscriptions.length} subscriptions. ` +
+        `polling ${this.plan.bookPolled.length} books (with streamed trades for ${this.plan.tradesOnly.length}). ${this.plan.subscriptions.length} subscriptions. ` +
+        `Reading up to ${this.options.positionReadsPerMinute} accounts a minute. ` +
         `Alerts ${this.options.publishAlerts ? `sent to ${this.options.sinks.map((s) => s.name).join(" and ") || "no channel"}` : "recorded only (shadow run)"}.`,
     );
 
@@ -122,6 +131,7 @@ export class Collector {
     this.every("candles", CANDLES_EVERY_MS, () => this.refreshCandles(), 10_000);
     this.every("retention", RETENTION_EVERY_MS, async () => this.applyRetention(), 5 * 60_000);
     this.every("outcomes", OUTCOMES_EVERY_MS, async () => this.measureOutcomes(), 2 * 60_000);
+    if (this.options.positionReadsPerMinute > 0) this.every("positions", 1_000, () => this.readPositions(), 2 * 60_000);
     void this.pollNextBook();
     this.scheduleFlush();
   }
@@ -156,6 +166,7 @@ export class Collector {
       case "trades":
         this.agg.onTrades(msg.data as Trade[], at);
         this.watch.onTrades(msg.data as Trade[]);
+        this.traders.onTrades(msg.data as Trade[]);
         break;
     }
   }
@@ -231,6 +242,11 @@ export class Collector {
     if (bars.length === 0) return;
     this.store.writeBars(bars);
     this.checkAlerts(bars);
+    try {
+      this.store.writeTraders(this.traders.take());
+    } catch (err) {
+      this.options.log(`error: traders: ${(err as Error).message}`);
+    }
     const stats = this.pool!.stats();
     const received = stats.received - this.lastStats.received;
     const restWeight = this.limiter.taken - this.lastStats.restWeight;
@@ -280,6 +296,16 @@ export class Collector {
     const { keepMinuteDays, log } = this.options;
     const { minuteBars, rolledBars } = this.store.rollUp(Date.now() - keepMinuteDays * 86_400_000);
     if (minuteBars) log(`retention: rolled ${minuteBars} minute bars older than ${keepMinuteDays} days into ${rolledBars} 15-minute bars`);
+    const pruned = this.store.prunePositions(Date.now());
+    if (pruned.traders || pruned.accounts || pruned.positions) {
+      log(`retention: dropped ${pruned.traders} idle traders, ${pruned.accounts} idle accounts and ${pruned.positions} stale positions`);
+    }
+  }
+
+  /** Reads a minute's worth of due accounts; when none are due, waits before looking again. */
+  private async readPositions(): Promise<void> {
+    const read = await this.positions.pollDue(() => this.stopped);
+    if (read === 0 && !this.stopped) await new Promise((resolve) => setTimeout(resolve, 30_000));
   }
 
   /** Measures the hour after each warning once it's over, for the track record. */

@@ -2,8 +2,25 @@ import { createReadStream, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { GRADES, type Grade } from "@telltale/detectors";
-import type { AlertList, AlertView, Board, BoardDex, BoardMarket, DexDetail, Health, HistoryPoint, HistoryRange, MarketDetail, MarketHistory, TrackRecord } from "./api-types.ts";
+import { GRADES, liquidationDistancePct, positionMetrics, pushCostUsd, type Grade, type PositionInput } from "@telltale/detectors";
+import type { ClearinghouseState, InfoClient } from "@telltale/hl";
+import type {
+  AlertList,
+  AlertView,
+  Board,
+  BoardDex,
+  BoardMarket,
+  DexDetail,
+  Health,
+  HistoryPoint,
+  HistoryRange,
+  MarketDetail,
+  MarketHistory,
+  MarketPositions,
+  TrackRecord,
+  WalletPosition,
+  WalletView,
+} from "./api-types.ts";
 import { badgeSvg, type BadgeState } from "./badge.ts";
 import { HISTORY_RANGES, isHistoryRange, marketHistory } from "./history.ts";
 import { METHODOLOGY_VERSION } from "./methodology.ts";
@@ -22,6 +39,8 @@ export interface ApiOptions {
   alertsPublic?: boolean;
   /** Only alerts started at or after this (epoch ms) are shown, so the shadow run's stay private. */
   alertsSince?: number;
+  /** Reads wallets live from Hyperliquid for `/api/wallets/{address}`; `null` turns lookups off. */
+  info?: Pick<InfoClient, "clearinghouseState"> | null;
   now?: () => number;
 }
 
@@ -29,6 +48,14 @@ const HISTORY_MS = 24 * 60 * 60_000;
 const BUCKET_MS = 5 * 60_000;
 /** Pull rates span 14 days, so an hourly recount is plenty; counting takes a few hundred ms. */
 const PULL_RATES_MS = 60 * 60_000;
+/** Positions read longer ago than this are left out of a market's map. */
+const POSITION_FRESH_HOURS = 6;
+/** A wallet is read from Hyperliquid at most this often; repeat visits get the stored answer. */
+const WALLET_CACHE_MS = 30_000;
+const WALLET_CACHE_SIZE = 500;
+/** More lookups than this at once are turned away, so one visitor can't use up the REST budget. */
+const WALLET_LOOKUPS_AT_ONCE = 4;
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -82,9 +109,13 @@ export class Api {
   /** Histories computed since the last refresh, by coin and range. */
   private histories = new Map<string, MarketHistory>();
   private pullRates: { at: number; rates: ReturnType<typeof loadPullRates> } | null = null;
+  /** Position maps computed since the last refresh, by coin. */
+  private positionMaps = new Map<string, MarketPositions | null>();
+  private wallets = new Map<string, { at: number; view: Promise<WalletView> }>();
+  private walletLookups = 0;
 
   constructor(options: ApiOptions) {
-    this.options = { staleAfterSeconds: 180, alertsPublic: false, alertsSince: 0, now: Date.now, ...options, webRoot: options.webRoot ? resolve(options.webRoot) : null };
+    this.options = { staleAfterSeconds: 180, alertsPublic: false, alertsSince: 0, info: null, now: Date.now, ...options, webRoot: options.webRoot ? resolve(options.webRoot) : null };
     this.db = new DatabaseSync(options.dbPath, { readOnly: true });
   }
 
@@ -114,6 +145,7 @@ export class Api {
     };
     this.track = this.trackRecord(generatedAt);
     this.histories.clear();
+    this.positionMaps.clear();
   }
 
   close(): void {
@@ -158,6 +190,8 @@ export class Api {
       const found = this.marketHistory(history[1]!, range);
       return found ? this.send(res, 200, found) : this.send(res, 404, { error: `No live market named ${history[1]}.` });
     }
+    const wallet = path.match(/^\/api\/wallets\/([^/]+)$/);
+    if (wallet) return this.wallet(wallet[1]!, res);
     const market = path.match(/^\/api\/markets\/(.+)$/);
     if (market) {
       const detail = this.marketDetail(market[1]!);
@@ -298,7 +332,105 @@ export class Api {
       grade: m.grade,
       history,
       alerts: this.options.alertsPublic ? this.alerts(["coin = ?"], [coin], 10) : [],
+      positions: this.marketPositions(coin),
     };
+  }
+
+  /** Positions read within the last few hours, as a liquidation map. Kept until the next refresh. */
+  private marketPositions(coin: string): MarketPositions | null {
+    if (this.positionMaps.has(coin)) return this.positionMaps.get(coin)!;
+    const m = this.card!.markets.find((x) => x.coin === coin)!;
+    let found: MarketPositions | null = null;
+    if (m.metrics.markPx !== null) {
+      const now = this.options.now();
+      try {
+        const positions = this.freshPositions(coin, now);
+        const traders = this.db.prepare("SELECT count(*) AS n FROM traders WHERE coin = ? AND last_seen >= ?").get(coin, now - HISTORY_MS) as { n: number };
+        const metrics = positionMetrics(positions, { markPx: m.metrics.markPx, oiUsd: m.metrics.oiUsd, sideDepthUsd: m.metrics.sideDepthUsd });
+        found = { ...metrics, freshHours: POSITION_FRESH_HOURS, traders24h: traders.n };
+      } catch {
+        // The collector creates the position tables; until it has, there's nothing to show.
+      }
+    }
+    this.positionMaps.set(coin, found);
+    return found;
+  }
+
+  private freshPositions(coin: string, now: number): (PositionInput & { address: string })[] {
+    return this.db
+      .prepare(
+        `SELECT address, size, position_usd AS positionUsd, liquidation_px AS liquidationPx, leverage, polled_at AS polledAt
+         FROM positions WHERE coin = ? AND polled_at >= ?`,
+      )
+      .all(coin, now - POSITION_FRESH_HOURS * 3_600_000) as unknown as (PositionInput & { address: string })[];
+  }
+
+  /** `/api/wallets/<address>`: the wallet's open positions, read live, each set against its market. */
+  private wallet(raw: string, res: ServerResponse): void {
+    if (!ADDRESS.test(raw)) return this.send(res, 400, { error: "That isn't a wallet address: expected 0x and 40 hex digits." });
+    if (!this.options.info) return this.send(res, 503, { error: "Wallet lookups are turned off on this server." });
+    const address = raw.toLowerCase();
+    const now = this.options.now();
+    let cached = this.wallets.get(address);
+    if (!cached || now - cached.at >= WALLET_CACHE_MS) {
+      if (this.walletLookups >= WALLET_LOOKUPS_AT_ONCE) return this.send(res, 429, { error: "Too many wallet lookups right now. Try again in a minute." }, "no-store");
+      this.walletLookups++;
+      const view = this.readWallet(address).finally(() => this.walletLookups--);
+      cached = { at: now, view };
+      this.wallets.delete(address);
+      this.wallets.set(address, cached);
+      if (this.wallets.size > WALLET_CACHE_SIZE) this.wallets.delete(this.wallets.keys().next().value!);
+      view.catch(() => this.wallets.get(address) === cached && this.wallets.delete(address));
+    }
+    cached.view.then(
+      (view) => this.send(res, 200, view, "public, max-age=30"),
+      (err: Error) => this.send(res, 502, { error: `Couldn't read the wallet from Hyperliquid: ${err.message}` }),
+    );
+  }
+
+  private async readWallet(address: string): Promise<WalletView> {
+    const board = this.board!;
+    const states = await Promise.all(board.dexes.map((d) => this.options.info!.clearinghouseState(address, d.dex)));
+    const now = this.options.now();
+    const dexes: WalletView["dexes"] = [];
+    const positions: WalletPosition[] = [];
+    states.forEach((state, i) => {
+      const d = board.dexes[i]!;
+      if (!state) return;
+      const held = walletPositions(state);
+      const accountUsd = Number(state.marginSummary.accountValue) || 0;
+      const positionUsd = held.reduce((sum, p) => sum + p.positionUsd, 0);
+      if (accountUsd > 0 || held.length > 0) dexes.push({ dex: d.dex, slug: d.slug, name: d.fullName, accountUsd, positionUsd });
+      for (const p of held) {
+        const m = this.card!.markets.find((x) => x.coin === p.coin);
+        const distancePct = liquidationDistancePct(p.size, p.liquidationPx, p.markPx);
+        let pushCost: number | null = null;
+        let liquidatedFirstUsd: number | null = null;
+        if (m && distancePct !== null) {
+          pushCost = pushCostUsd(m.metrics.sideDepthUsd[p.size > 0 ? "bid" : "ask"], distancePct);
+          try {
+            liquidatedFirstUsd = this.freshPositions(p.coin, now)
+              .filter((o) => o.address !== address && Math.sign(o.size) === Math.sign(p.size))
+              .filter((o) => (liquidationDistancePct(o.size, o.liquidationPx, p.markPx) ?? Infinity) < distancePct)
+              .reduce((sum, o) => sum + o.positionUsd, 0);
+          } catch {
+            // No position tables yet.
+          }
+        }
+        positions.push({
+          ...p,
+          dex: d.dex,
+          side: p.size > 0 ? "long" : "short",
+          distancePct,
+          grade: m?.grade.grade ?? null,
+          graded: m !== undefined,
+          pushCostUsd: pushCost,
+          liquidatedFirstUsd,
+        });
+      }
+    });
+    positions.sort((a, b) => b.positionUsd - a.positionUsd);
+    return { generatedAt: now, methodologyVersion: METHODOLOGY_VERSION, address, dexes, positions };
   }
 
   /** Kept until the next refresh, since the scorecard and the newest minute only change then. */
@@ -381,6 +513,30 @@ export class Api {
     });
     createReadStream(target).pipe(res);
   }
+}
+
+type HeldPosition = Pick<WalletPosition, "coin" | "size" | "positionUsd" | "entryPx" | "markPx" | "liquidationPx" | "leverage" | "cross" | "unrealizedPnlUsd">;
+
+function walletPositions(state: ClearinghouseState): HeldPosition[] {
+  const out: HeldPosition[] = [];
+  for (const { position: p } of state.assetPositions) {
+    const size = Number(p.szi);
+    if (!size) continue;
+    const positionUsd = Math.abs(Number(p.positionValue)) || 0;
+    const liq = Number(p.liquidationPx);
+    out.push({
+      coin: p.coin,
+      size,
+      positionUsd,
+      entryPx: Number(p.entryPx) || 0,
+      markPx: positionUsd / Math.abs(size),
+      liquidationPx: p.liquidationPx !== null && liq > 0 ? liq : null,
+      leverage: p.leverage?.value ?? 0,
+      cross: p.leverage?.type !== "isolated",
+      unrealizedPnlUsd: Number(p.unrealizedPnl) || 0,
+    });
+  }
+  return out;
 }
 
 function statSafe(path: string) {

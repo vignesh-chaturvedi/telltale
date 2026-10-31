@@ -122,3 +122,41 @@ export interface SpotMeta {
   tokens: SpotToken[];
   universe: unknown[];
 }
+
+/** One open position from `clearinghouseState`. Numbers are decimal strings. */
+export interface AssetPosition {
+  type: string;
+  position: {
+    coin: string;
+    /** Signed size in contracts; negative is short. */
+    szi: string;
+    leverage: { type: "cross" | "isolated"; value: number; rawUsd?: string };
+    entryPx: string;
+    /** Size at the mark price, in USD. */
+    positionValue: string;
+    unrealizedPnl: string;
+    returnOnEquity: string;
+    /** `null` when the account's margin covers any price. */
+    liquidationPx: string | null;
+    marginUsed: string;
+    maxLeverage: number;
+    cumFunding: { allTime: string; sinceOpen: string; sinceChange: string };
+  };
+}
+
+export interface MarginSummary {
+  accountValue: string;
+  totalNtlPos: string;
+  totalRawUsd: string;
+  totalMarginUsed: string;
+}
+
+/** One account's perp positions on one DEX. */
+export interface ClearinghouseState {
+  marginSummary: MarginSummary;
+  crossMarginSummary: MarginSummary;
+  crossMaintenanceMarginUsed: string;
+  withdrawable: string;
+  assetPositions: AssetPosition[];
+  time: number;
+}

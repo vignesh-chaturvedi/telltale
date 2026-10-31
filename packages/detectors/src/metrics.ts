@@ -69,6 +69,8 @@ export interface MarketMetrics {
   coin: string;
   /** Minutes in the window with both a context and a book. */
   coverageMinutes: number;
+  /** The last mark price in the window. */
+  markPx: number | null;
   oiUsd: number | null;
   volume24hUsd: number | null;
   /** Median impact spread, bps. */
@@ -77,6 +79,8 @@ export interface MarketMetrics {
   depth2Usd: number | null;
   /** Thinnest ±2% depth seen in any snapshot. */
   thinnestDepth2Usd: number | null;
+  /** Median USD resting on each side within each band: what it costs to push the price that far. */
+  sideDepthUsd: Record<"bid" | "ask", Record<DepthBand, number | null>>;
   /** `depth2Usd` as a share of open interest. */
   depthToOi: number | null;
   /** Price move, in %, that wipes out a position opened at maximum leverage: 50 / maxLeverage. */
@@ -151,6 +155,9 @@ export function marketMetrics(input: MarketInput): MarketMetrics {
       ? []
       : walled.map((b) => Math.min(depth(b, bandPct, "bid")! - rate * wall(b, bandPct, "bid")!, depth(b, bandPct, "ask")! - rate * wall(b, bandPct, "ask")!));
 
+  const sideDepth = (side: "bid" | "ask") =>
+    Object.fromEntries(DEPTH_BANDS.map((band) => [band, median(booked.map((b) => depth(b, band, side)))])) as Record<DepthBand, number | null>;
+
   const streamed = bars.filter((b) => b.oracleChanges !== null);
   const gaps = streamed.map((b) => b.oracleMaxGapMs);
   const measuredGaps = gaps.filter((g): g is number => g !== null);
@@ -158,11 +165,13 @@ export function marketMetrics(input: MarketInput): MarketMetrics {
   return {
     coin: input.coin,
     coverageMinutes: bars.filter((b) => b.oraclePx !== null && b.bidDepth2 !== null).length,
+    markPx: lastPriced?.markPx ?? null,
     oiUsd,
     volume24hUsd: last(bars.map((b) => b.dayNtlVlm)),
     spreadBps: median(bars.map((b) => b.spreadBps)),
     depth2Usd,
     thinnestDepth2Usd: min(bars.map((b) => b.minDepth2)),
+    sideDepthUsd: { bid: sideDepth("bid"), ask: sideDepth("ask") },
     depthToOi: depth2Usd !== null && oiUsd ? depth2Usd / oiUsd : null,
     liquidationDistancePct: distancePct,
     liquidationBandPct: bandPct,

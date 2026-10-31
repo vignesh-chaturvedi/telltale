@@ -32,8 +32,18 @@ test("never subscribes to a delisted market, since one bad coin drops the whole 
   assert.ok(!plan.bookPolled.some((c) => delisted.includes(c)));
 });
 
-test("adds one all-markets stream and two subscriptions per streamed book", () => {
+test("adds one all-markets stream, two subscriptions per streamed book and one per trades-only market", () => {
   const plan = planSubscriptions(universe, { bookStreams: 5 });
   assert.equal(plan.subscriptions.filter((s) => s.type === "allDexsAssetCtxs").length, 1);
-  assert.equal(plan.subscriptions.length, 1 + plan.ctxStreamed.length + 2 * plan.bookStreamed.length);
+  assert.equal(plan.subscriptions.length, 1 + plan.ctxStreamed.length + 2 * plan.bookStreamed.length + plan.tradesOnly.length);
+});
+
+test("streams trades for polled markets on active DEXs, so the position sample sees who trades them", () => {
+  const plan = planSubscriptions(universe, { bookStreams: 4 });
+  assert.ok(plan.tradesOnly.length > 0);
+  assert.ok(plan.tradesOnly.every((c) => plan.bookPolled.includes(c)));
+  const traded = plan.subscriptions.filter((s) => s.type === "trades").map((s) => s.coin!);
+  assert.deepEqual(traded.sort(), [...plan.bookStreamed, ...plan.tradesOnly].sort());
+  const dormant = universe.markets.filter((m) => isLive(m) && !universe.dexes.find((d) => d.name === m.dex)?.active).map((m) => m.coin);
+  assert.ok(!plan.tradesOnly.some((c) => dormant.includes(c)), "dormant DEXs have no trades to stream");
 });

@@ -6,6 +6,9 @@
 - **Cancel-adjusted cost to liquidation** (experimental, not graded). The collector records how much depth sits in large walls each minute (schema v6), and each market's pull rate comes from 14 days of walls that ended. The cost card shows the adjusted cost beside the raw one.
 - **Pulled walls retuned.** A wall must stand 90 seconds before its pull is an alert, and pulled walls are never critical. Of 214 measured warnings, walls pulled sooner were followed by a top-10% hour no more often than their control hours.
 - **Methodology version 1**, with open questions, and `methodologyVersion` in the API.
+- **Positions** (experimental, not graded). The collector notes who trades each market from the trade stream, now streamed for every market on an active DEX, and reads those accounts' positions largest first, up to 150 reads a minute (schema v7). Each market page shows coverage, the largest accounts' share, a liquidation ladder, the worst push on each side and the nearest $1M+ cluster.
+- **Check a wallet.** `/wallet/{address}` and `GET /api/wallets/{address}` read a wallet's open positions live, each with its market's grade, its distance to liquidation and the book in the way.
+- **Methodology version 2**, describing positions. `deploy/deploy.sh` now waits up to a minute for the API to answer after a restart.
 
 ## 0.1.0 · 2026-10-13
 

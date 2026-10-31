@@ -7,6 +7,7 @@ import { Freshness } from "../components/Freshness.tsx";
 import { GradeBadge } from "../components/GradeBadge.tsx";
 import { LineChart } from "../components/LineChart.tsx";
 import { Num } from "../components/Num.tsx";
+import { Positions } from "../components/Positions.tsx";
 import { ErrorState, Loading, Skeleton } from "../components/States.tsx";
 import { dexPath, splitCoin, useApi, type HistoryRange, type MarketDetail, type MarketHistory, type MetricSummary, type SummarizedMetric } from "../lib/api.ts";
 import { bps, count, percent, price, score, usd, utcDate, utcTime, wholePercent, type Formatted } from "../lib/format.ts";
@@ -200,6 +201,8 @@ function MarketBody({ market, receivedAt }: { market: MarketDetail; receivedAt: 
           <Detail term="Minutes of data in the window" value={count(m.coverageMinutes)} />
         </dl>
       </section>
+
+      <Positions market={market} />
 
       <Activity history={history} range={range} onRange={setRange} />
 

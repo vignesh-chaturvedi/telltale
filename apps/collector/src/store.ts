@@ -4,11 +4,13 @@ import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { BarInput, Severity, Signal, WallEvent } from "@telltale/detectors";
 import type { Candle, WsGap } from "@telltale/hl";
 import type { MinuteBar } from "./bars.ts";
+import { MIN_REPOLL_MS, TRADE_REPOLL_MS, type AccountSnapshot, type DueAccount, type PositionStore } from "./positions.ts";
 import { BAR_COLUMNS } from "./scoring.ts";
 import type { MidSeries, Outcome } from "./track.ts";
+import type { TraderActivity } from "./traders.ts";
 import { dexConfig, type Universe } from "./universe.ts";
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /** Version 1: the Phase 1 schema. Later versions are applied by MIGRATIONS. */
 export const SCHEMA_V1 = `
@@ -204,6 +206,48 @@ const MIGRATIONS = [
   ALTER TABLE minute_bars ADD COLUMN bid_wall_5 REAL;
   ALTER TABLE minute_bars ADD COLUMN ask_wall_5 REAL;
   `,
+  // Positions: who trades each market (from the trades stream), the accounts to read, and each
+  // account's open positions as of its last read (see positions.ts). Only the latest read is kept.
+  `
+  CREATE TABLE traders (
+    coin TEXT NOT NULL,
+    address TEXT NOT NULL,
+    first_seen INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL,
+    trades INTEGER NOT NULL,
+    traded_usd REAL NOT NULL,
+    PRIMARY KEY (coin, address)
+  ) WITHOUT ROWID;
+  CREATE INDEX traders_last_seen ON traders (last_seen);
+  CREATE TABLE accounts (
+    address TEXT NOT NULL,
+    dex TEXT NOT NULL,
+    first_seen INTEGER NOT NULL,
+    last_trade INTEGER NOT NULL,
+    traded_since_poll REAL NOT NULL,
+    polled_at INTEGER,
+    next_poll INTEGER NOT NULL,
+    account_usd REAL,
+    position_usd REAL,
+    PRIMARY KEY (address, dex)
+  ) WITHOUT ROWID;
+  CREATE INDEX accounts_next_poll ON accounts (next_poll);
+  CREATE TABLE positions (
+    coin TEXT NOT NULL,
+    address TEXT NOT NULL,
+    dex TEXT NOT NULL,
+    polled_at INTEGER NOT NULL,
+    size REAL NOT NULL,
+    entry_px REAL NOT NULL,
+    position_usd REAL NOT NULL,
+    liquidation_px REAL,
+    leverage REAL NOT NULL,
+    cross INTEGER NOT NULL,
+    margin_usd REAL NOT NULL,
+    PRIMARY KEY (coin, address)
+  ) WITHOUT ROWID;
+  CREATE INDEX positions_address ON positions (address, dex);
+  `,
 ];
 
 export const ROLLUP_MS = 15 * 60_000;
@@ -295,8 +339,14 @@ function roundUsd(bar: MinuteBar): MinuteBar {
   return out;
 }
 
+/** Who traded each market is kept this long; accounts holding positions are kept while they do. */
+export const TRADER_DAYS = 14;
+export const ACCOUNT_DAYS = 30;
+/** Positions not re-read within this long (the budget fell behind) are dropped rather than shown stale. */
+export const POSITION_MAX_AGE_MS = 2 * 86_400_000;
+
 /** SQLite storage for the collector. One file, WAL mode, safe to read while it writes. */
-export class Store {
+export class Store implements PositionStore {
   readonly path: string;
   readonly db: DatabaseSync;
   private readonly insertBar: StatementSync;
@@ -447,6 +497,77 @@ export class Store {
   loadAlerts(since: number): AlertRecord[] {
     const rows = this.db.prepare(`SELECT ${ALERT_COLUMNS} FROM alerts WHERE resolved_at IS NULL OR started_at >= ? ORDER BY started_at, id`).all(since);
     return rows.map((r) => toAlert(r as Record<string, unknown>));
+  }
+
+  /**
+   * Adds a minute's trading to each trader and account. A new account is due at once; a known one
+   * becomes due a minute after it trades, but no sooner than `MIN_REPOLL_MS` after its last read.
+   */
+  writeTraders(activity: readonly TraderActivity[]): void {
+    if (activity.length === 0) return;
+    const trader = this.db.prepare(`
+      INSERT INTO traders VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (coin, address) DO UPDATE SET
+        last_seen = max(last_seen, excluded.last_seen), trades = trades + excluded.trades, traded_usd = traded_usd + excluded.traded_usd`);
+    const account = this.db.prepare(`
+      INSERT INTO accounts (address, dex, first_seen, last_trade, traded_since_poll, next_poll) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (address, dex) DO UPDATE SET
+        last_trade = max(last_trade, excluded.last_trade),
+        traded_since_poll = traded_since_poll + excluded.traded_since_poll,
+        next_poll = min(next_poll, max(excluded.last_trade + ${TRADE_REPOLL_MS}, coalesce(polled_at, 0) + ${MIN_REPOLL_MS}))`);
+    const accounts = new Map<string, { address: string; dex: string; lastTrade: number; usd: number }>();
+    for (const a of activity) {
+      const key = `${a.dex} ${a.address}`;
+      const acc = accounts.get(key);
+      if (acc) {
+        acc.lastTrade = Math.max(acc.lastTrade, a.lastSeen);
+        acc.usd += a.tradedUsd;
+      } else accounts.set(key, { address: a.address, dex: a.dex, lastTrade: a.lastSeen, usd: a.tradedUsd });
+    }
+    this.transaction(() => {
+      for (const a of activity) trader.run(a.coin, a.address, a.lastSeen, a.lastSeen, a.trades, Math.round(a.tradedUsd));
+      for (const a of accounts.values()) account.run(a.address, a.dex, a.lastTrade, a.lastTrade, Math.round(a.usd), a.lastTrade);
+    });
+  }
+
+  /** Accounts due a read, largest first: USD held at the last read plus USD traded since. */
+  dueAccounts(now: number, limit: number): DueAccount[] {
+    return this.db
+      .prepare(
+        `SELECT address, dex FROM accounts WHERE next_poll <= ?
+         ORDER BY coalesce(position_usd, 0) + traded_since_poll DESC, next_poll, address LIMIT ?`,
+      )
+      .all(now, limit)
+      .map((r) => ({ address: r.address as string, dex: r.dex as string }));
+  }
+
+  /** Replaces an account's positions on one DEX with what a read found, and schedules the next read. */
+  writeSnapshot(s: AccountSnapshot): void {
+    const insert = this.db.prepare("INSERT OR REPLACE INTO positions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    this.transaction(() => {
+      this.db.prepare("DELETE FROM positions WHERE address = ? AND dex = ?").run(s.address, s.dex);
+      for (const p of s.positions) {
+        insert.run(p.coin, p.address, p.dex, p.polledAt, p.size, p.entryPx, Math.round(p.positionUsd), p.liquidationPx, p.leverage, p.cross ? 1 : 0, Math.round(p.marginUsd));
+      }
+      this.db
+        .prepare("UPDATE accounts SET polled_at = ?, next_poll = ?, account_usd = ?, position_usd = ?, traded_since_poll = 0 WHERE address = ? AND dex = ?")
+        .run(s.polledAt, s.nextPoll, Math.round(s.accountUsd), Math.round(s.positionUsd), s.address, s.dex);
+    });
+  }
+
+  deferAccount(a: DueAccount, until: number): void {
+    this.db.prepare("UPDATE accounts SET next_poll = ? WHERE address = ? AND dex = ?").run(until, a.address, a.dex);
+  }
+
+  /** Forgets traders not seen for `TRADER_DAYS`, idle empty accounts, and positions gone stale. */
+  prunePositions(now: number): { traders: number; accounts: number; positions: number } {
+    const day = 86_400_000;
+    const traders = this.db.prepare("DELETE FROM traders WHERE last_seen < ?").run(now - TRADER_DAYS * day).changes;
+    const accounts = this.db
+      .prepare("DELETE FROM accounts WHERE last_trade < ? AND coalesce(position_usd, 0) = 0")
+      .run(now - ACCOUNT_DAYS * day).changes;
+    const positions = this.db.prepare("DELETE FROM positions WHERE polled_at < ?").run(now - POSITION_MAX_AGE_MS).changes;
+    return { traders: Number(traders), accounts: Number(accounts), positions: Number(positions) };
   }
 
   writeBookEvents(events: readonly WallEvent[]): void {

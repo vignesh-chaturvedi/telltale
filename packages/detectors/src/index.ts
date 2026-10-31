@@ -4,5 +4,6 @@ export * from "./alerts.ts";
 export * from "./book.ts";
 export * from "./grading.ts";
 export * from "./metrics.ts";
+export * from "./positions.ts";
 export * from "./stats.ts";
 export * from "./walls.ts";

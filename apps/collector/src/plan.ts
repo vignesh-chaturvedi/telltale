@@ -21,6 +21,8 @@ export interface SubscriptionPlan {
   bookStreamed: string[];
   /** Markets whose books are polled over REST once per cycle instead. */
   bookPolled: string[];
+  /** Polled markets on active DEXs, whose trades are still streamed so the position sample sees who trades them. */
+  tradesOnly: string[];
 }
 
 /**
@@ -31,6 +33,8 @@ export interface SubscriptionPlan {
  *   oracle and we need to see each update.
  * - Books and trades are streamed for the thinnest markets by 24h volume, where manipulation
  *   is cheapest. The deepest core markets and all dormant DEXs are polled instead.
+ * - Trades are streamed for the rest of the active DEXs' markets too, so the position sample
+ *   finds the accounts trading the deepest markets.
  */
 export function planSubscriptions(universe: Universe, options: PlanOptions): SubscriptionPlan {
   const activeDexes = new Set(universe.dexes.filter((d) => d.active).map((d) => d.name));
@@ -43,6 +47,7 @@ export function planSubscriptions(universe: Universe, options: PlanOptions): Sub
     .map((m) => m.coin)
     .sort((a, b) => volume(a) - volume(b) || (a < b ? -1 : 1));
   const bookStreamed = candidates.slice(0, options.bookStreams);
+  const tradesOnly = candidates.slice(options.bookStreams);
   const streamedSet = new Set(bookStreamed);
   const bookPolled = live.map((m) => m.coin).filter((c) => !streamedSet.has(c));
 
@@ -53,6 +58,7 @@ export function planSubscriptions(universe: Universe, options: PlanOptions): Sub
       { type: "l2Book", coin, nSigFigs: BOOK_SIG_FIGS },
       { type: "trades", coin },
     ]),
+    ...tradesOnly.map((coin) => ({ type: "trades", coin })),
   ];
-  return { subscriptions, ctxStreamed, bookStreamed, bookPolled };
+  return { subscriptions, ctxStreamed, bookStreamed, bookPolled, tradesOnly };
 }

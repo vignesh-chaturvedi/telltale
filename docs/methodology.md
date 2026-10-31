@@ -1,6 +1,6 @@
 # How Telltale grades markets and raises alerts
 
-Version 1 · October 31, 2026. What changed in each version is listed under [Changes](#changes), and the parts we're least sure of under [Open questions](#open-questions).
+Version 2 · November 1, 2026. What changed in each version is listed under [Changes](#changes), and the parts we're least sure of under [Open questions](#open-questions).
 
 Telltale grades every live Hyperliquid perpetual market from A to E. It covers the core markets, whose oracles Hyperliquid's validators run, and HIP-3 markets, whose oracles their deployers run. Each grade comes with the numbers behind it. This document explains what is measured, how the numbers turn into a grade, and what the grades can't tell you.
 
@@ -112,6 +112,21 @@ The cost to reach liquidation levels counts every order resting in the book, but
 
 Because both numbers are medians, a wall that stands for less than half the hour barely moves either of them; the adjustment matters where large walls stand most of the time. It assumes a wall is as likely to be pulled when the price heads toward it as on an ordinary day, which is probably optimistic in a fast move. The history charts apply today's pull rate to each minute's walls, which are recorded only from this version on.
 
+## Positions (experimental)
+
+Who holds a market's open interest, and where their positions liquidate, decides how far a push can cascade. Hyperliquid's public API shows any one account's positions but has no list of everyone holding a market, so Telltale reads a sample: the accounts it sees trading. None of this is graded.
+
+- **Accounts.** Every trade names its buyer and seller. The collector notes who traded each market, when and for how much, and keeps it for 14 days. For this, trades are streamed for every market on an active DEX, including the deep ones whose books are polled.
+- **Reads.** An account's positions are read one DEX at a time, up to 150 reads a minute: 300 of the collector's 1,000 REST weight. The largest accounts go first, by the USD they held at their last read plus what they've traded since. An account holding $1M or more on a DEX is read again every 10 minutes, $100K or more every 30 minutes, anything less every 2 hours, and an empty one daily. A trade brings the next read forward, but not to within 10 minutes of the last one.
+- **Coverage.** Only positions read in the last 6 hours count. Coverage is the tracked longs plus shorts against twice the open interest, since every contract has a long side and a short side.
+- **Concentration.** The 10 largest accounts' share of all open positions. When coverage is partial it's a lower bound.
+- **Liquidation ladder.** Tracked positions by how far the mark must move to liquidate them, in 1% steps out to 20%: longs as the price falls, shorts as it rises. Sizes are at the mark price when each account was read.
+- **The worst push.** For each distance out to 5%, the book in the way (bids for a fall, asks for a rise, interpolated between the median depth within 1%, 2% and 5%) against the tracked positions that distance would liquidate. The page shows the distance where that ratio is highest. Above 1, a push liquidates more than it costs, and the liquidations then trade into the same book.
+- **The nearest cluster.** The closest 1% step on each side with $1M or more of tracked liquidations, and the book in the way of its far edge.
+- **Check a wallet.** Any address's positions are read live, one call per DEX, and each liquidation price gets the same push price, plus the tracked positions on the same side that liquidate first. The positions read aren't stored.
+
+Accounts that hold without trading aren't found until they trade, so coverage builds over the first days and stays partial where positions are held for weeks. A cross-margin position's liquidation price depends on the account's other positions, so each read is a snapshot. Large positions may be liquidated in parts, and what the book can't take goes to the backstop liquidator or to auto-deleveraging, so the push ratio is a guide to the pressure, not a simulation of a cascade.
+
 ## History
 
 Every check is also charted over the last 24 hours, 7 days and 30 days, to show whether today's number is usual for the market. Each point is the check measured the way the grade measures it, over one step instead of the last 60 minutes: 5-minute steps for 24 hours, hourly steps for 7 days and 4-hour steps for 30 days. Depth, the cost to reach liquidation levels and spread are the step's medians, the oracle and peer gaps its 95th percentile, and price, open interest and funding its last minute. On the 7-day chart, each point is the number the grade would have used for that hour.
@@ -177,7 +192,7 @@ Both archives keep only the 20 best price levels on each side, about ±0.2% of t
 - **Grouped books.** Depth is counted in price buckets of 0.1–0.6% of the price, so a band's edge is accurate to about one bucket. Books show at most 20 levels per side.
 - **Oracle updates are seen only as price changes.** Telltale can't tell a re-sent unchanged price from a missed update without reading node data.
 - **The window is short.** A 60-minute window reacts quickly and can swing with market hours. The history charts show how far each check swings; grading on longer windows is planned.
-- **Position concentration isn't measured yet.** The public API shows any account's positions, but not who holds a market's open interest. That's planned by collecting trader addresses from the trade stream and looking up the largest accounts.
+- **Positions are a sample.** Telltale finds accounts by seeing them trade, so a holder who hasn't traded since the collector started isn't counted. Each market shows its coverage.
 - **Daily moves use trade prices,** not the oracle price that HIP-3's rule refers to.
 - **Peers are matched by exact ticker only.** Two listings of the same index under different names (such as an S&P 500 index and S&P 500 futures) aren't compared, because a futures basis would look like disagreement.
 
@@ -187,9 +202,16 @@ These are the parts of the method we're least sure of. If you trade or run these
 
 - **How to treat cancels.** The cost to reach liquidation levels counts resting orders as if they'll stay. The experimental cancel-adjusted cost discounts large walls by how often they've been pulled, but it uses an ordinary day's pull rate, and walls may be pulled more often exactly when the price heads for them. It leaves smaller orders alone, though market makers widen or pull their quotes in fast moves too. Is the pull rate the right discount, and should smaller levels be discounted as well?
 - **Grading on distributions.** Grades use the last 60 minutes. A market that's deep most of the day but thin for an hour each night grades well most of the day. Grading on each check's distribution over a week, such as its worst hours or how often it falls below a band, would catch that, but grades would react more slowly. Which matters more: the market now, or how bad it gets?
-- **Positions.** Who holds the open interest matters: a few large accounts near their liquidation prices make a cascade likelier than many small ones. The largest accounts' positions and liquidation prices can be looked up, but not everyone's. How much of the open interest has to be covered before concentration is worth grading?
+- **Positions.** Who holds the open interest matters: a few large accounts near their liquidation prices make a cascade likelier than many small ones. The experimental positions sample covers the accounts seen trading, not everyone. How much of the open interest has to be covered before concentration or the push ratio is worth grading, and should the ratio count the book beyond 5%?
 
 ## Changes
+
+### Version 2 · November 1, 2026
+
+Grades are unchanged.
+
+- Positions (November 1, 2026): an experimental, ungraded sample of who holds each market, read from the accounts seen trading, with coverage, the largest accounts' share, a liquidation ladder, the worst push on each side and the nearest $1M+ cluster. Trades are now streamed for every market on an active DEX (schema v7 adds traders, accounts and positions).
+- Check a wallet (November 1, 2026): any address's open positions, read live, each with its market's grade, its distance to liquidation and the book in the way.
 
 ### Version 1 · October 31, 2026
 

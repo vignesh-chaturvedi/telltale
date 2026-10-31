@@ -16,6 +16,7 @@ import { Methodology } from "./pages/Methodology.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
 import { Replay } from "./pages/Replay.tsx";
 import { Replays } from "./pages/Replays.tsx";
+import { Wallet } from "./pages/Wallet.tsx";
 
 
 /**
@@ -96,6 +97,9 @@ export function App() {
                   Alerts
                 </NavLink>
               )}
+              <NavLink to="/wallet" viewTransition className={navClass}>
+                Wallet
+              </NavLink>
               <NavLink to="/replays" viewTransition className={navClass}>
                 Replays
               </NavLink>
@@ -124,6 +128,8 @@ export function App() {
             <Route path="/alerts" element={<Page><Alerts /></Page>} />
             <Route path="/replays" element={<Page><Replays /></Page>} />
             <Route path="/replays/:id" element={<Page><Replay /></Page>} />
+            <Route path="/wallet" element={<Page><Wallet /></Page>} />
+            <Route path="/wallet/:address" element={<Page><Wallet /></Page>} />
             <Route path="/methodology" element={<Page><Methodology /></Page>} />
             <Route path="/developers" element={<Page><Developers /></Page>} />
             <Route path="*" element={<Page><NotFound /></Page>} />

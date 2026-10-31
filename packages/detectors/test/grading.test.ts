@@ -6,11 +6,13 @@ import type { MarketMetrics } from "../src/metrics.ts";
 const strong: MarketMetrics = {
   coin: "BTC",
   coverageMinutes: 60,
+  markPx: 110_000,
   oiUsd: 3e9,
   volume24hUsd: 5e9,
   spreadBps: 0.5,
   depth2Usd: 4e8,
   thinnestDepth2Usd: 3e8,
+  sideDepthUsd: { bid: { 1: 1e8, 2: 2e8, 5: 4e8 }, ask: { 1: 1e8, 2: 2e8, 5: 4e8 } },
   depthToOi: 0.13,
   liquidationDistancePct: 1.25,
   liquidationBandPct: 1,

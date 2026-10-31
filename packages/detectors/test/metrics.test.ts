@@ -54,6 +54,13 @@ test("depth is measured against open interest in USD", () => {
   assert.equal(m.volume24hUsd, 5_000_000);
 });
 
+test("each side's depth in each band is its median, for pricing pushes, beside the last mark", () => {
+  const bars = Array.from({ length: 30 }, (_, i) => bar(i, { bidDepth1: i < 20 ? 20_000 : 1e9, markPx: 100 + i }));
+  const m = marketMetrics(input({ bars }));
+  assert.deepEqual(m.sideDepthUsd, { bid: { 1: 20_000, 2: 50_000, 5: 90_000 }, ask: { 1: 30_000, 2: 60_000, 5: 80_000 } });
+  assert.equal(m.markPx, 129);
+});
+
 test("move cost takes the thinner side at the liquidation band", () => {
   assert.equal(marketMetrics(input({ maxLeverage: 10 })).liquidationMoveCostUsd, 80_000);
   assert.equal(marketMetrics(input({ maxLeverage: 20 })).liquidationMoveCostUsd, 50_000);

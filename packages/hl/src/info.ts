@@ -1,5 +1,5 @@
 import { systemClock, type Clock, type TokenBucket } from "./limiter.ts";
-import type { Candle, L2Book, PerpAssetCtx, PerpDex, PerpDexLimits, PerpMeta, SpotMeta } from "./types.ts";
+import type { Candle, ClearinghouseState, L2Book, PerpAssetCtx, PerpDex, PerpDexLimits, PerpMeta, SpotMeta } from "./types.ts";
 
 export interface InfoRequest {
   type: string;
@@ -105,6 +105,14 @@ export class InfoClient {
 
   candleSnapshot(coin: string, interval: string, startTime: number, endTime: number): Promise<Candle[]> {
     return this.request({ type: "candleSnapshot", req: { coin, interval, startTime, endTime } });
+  }
+
+  /**
+   * One account's positions on one DEX; omit `dex` (or pass "") for core. Hyperliquid answers
+   * `null` for a DEX that doesn't exist.
+   */
+  clearinghouseState(user: string, dex = ""): Promise<ClearinghouseState | null> {
+    return this.request(dex ? { type: "clearinghouseState", user, dex } : { type: "clearinghouseState", user });
   }
 
   /** Spot tokens; a DEX's `collateralToken` is an index into `tokens`. */

@@ -2,6 +2,7 @@
 import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { parseArgs } from "node:util";
+import { InfoClient, MAINNET, TokenBucket } from "@telltale/hl";
 import { Api } from "./api.ts";
 
 const { values } = parseArgs({
@@ -26,12 +27,17 @@ const webRoot = values.web || null;
 // ALERTS_PUBLIC_SINCE (an ISO date) so the shadow run's alerts stay private.
 const since = process.env.ALERTS_PUBLIC_SINCE ? Date.parse(process.env.ALERTS_PUBLIC_SINCE) : 0;
 if (Number.isNaN(since)) log(`warn: ALERTS_PUBLIC_SINCE isn't a date: ${process.env.ALERTS_PUBLIC_SINCE}`);
+// Wallet lookups read Hyperliquid live, from their own small share of the IP's 1,200 weight a
+// minute, beside the collector's 1,000: a lookup asks every DEX (2 weight each, 22 for 11 DEXs), so
+// about 5 a minute, with 3 at once before they queue. WALLET_LOOKUPS=0 turns them off.
+const info = process.env.WALLET_LOOKUPS === "0" ? null : new InfoClient({ url: MAINNET.api, limiter: new TokenBucket({ perMinute: 120, burst: 66 }) });
 const api = new Api({
   dbPath: values.db,
   windowMinutes: Number(values.window),
   webRoot,
   alertsPublic: process.env.ALERTS_PUBLIC === "1",
   alertsSince: Number.isNaN(since) ? 0 : since,
+  info,
 });
 const refresh = () => {
   try {
