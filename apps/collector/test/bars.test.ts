@@ -82,6 +82,18 @@ test("summarizes streamed books and tracks the thinnest snapshot", () => {
   assert.ok(bar.bidDepth2! > 0 && bar.spreadBps! >= 0);
 });
 
+test("records the USD resting in large walls, from the same snapshot as the depth", () => {
+  const agg = new MinuteAggregator();
+  const level = (px: number, usd: number) => ({ px: String(px), sz: String(usd / px), n: 1 });
+  // Mid is 100; the $500K bid at 99.5 is 25 times the other levels and 0.5% away.
+  const bids = Array.from({ length: 10 }, (_, i) => level(99.9 - i * 0.2, i === 2 ? 500_000 : 20_000));
+  const asks = Array.from({ length: 10 }, (_, i) => level(100.1 + i * 0.2, 20_000));
+  agg.onBook({ coin: "ABC", time: T0, levels: [bids, asks] }, T0, "stream");
+  const bar = only(agg.flush(M0 + MINUTE), "ABC");
+  assert.deepEqual([bar.bidWall1, bar.bidWall2, bar.bidWall5].map((x) => Math.round(x!)), [500_000, 500_000, 500_000]);
+  assert.deepEqual([bar.askWall1, bar.askWall2, bar.askWall5], [0, 0, 0]);
+});
+
 test("a polled book never overwrites a streamed one in the same minute", () => {
   const agg = new MinuteAggregator();
   const book = wsFixture("l2Book")[0]!.data as L2Book;

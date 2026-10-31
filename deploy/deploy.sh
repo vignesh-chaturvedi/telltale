@@ -19,7 +19,11 @@ pnpm build
 sudo cp deploy/telltale-collector.service deploy/telltale-web.service deploy/telltale-backup.service deploy/telltale-backup.timer /etc/systemd/system/
 sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl daemon-reload
-sudo systemctl restart telltale-collector telltale-web
+# The collector upgrades the database schema as it starts, and the API may read new columns, so
+# the API restarts a few seconds after it.
+sudo systemctl restart telltale-collector
+sleep 3
+sudo systemctl restart telltale-web
 sudo systemctl reload caddy
 echo "Deployed $before → $after"
 sleep 5

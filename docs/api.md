@@ -7,6 +7,7 @@ Everything on [telltale.markets](https://telltale.markets) comes from a small re
 - **Any site can call it from the browser.** Responses carry `Access-Control-Allow-Origin: *`.
 - **Fresh every minute.** Grades cover the last 60 minutes and are recomputed every minute. Responses are cached for 30 seconds, so polling more than once a minute gets you nothing new.
 - **Times** are epoch milliseconds, in UTC. **Money** is in USD. **Gaps** are in basis points (1 bp = 0.01%).
+- **Versioned rules.** The board, market, DEX and history responses carry `methodologyVersion`, the version of [the methodology](https://telltale.markets/methodology) their numbers follow. It goes up whenever a rule changes.
 
 ## Market names
 
@@ -18,6 +19,7 @@ Core markets use their ticker: `BTC`, `HYPE`. Markets listed by other deployers 
 | --- | --- |
 | `/api/board` | Every market's grade and headline numbers, plus each DEX's summary |
 | `/api/markets/{coin}` | One market: every metric, the grade with its reasons, 24 hours of history, recent alerts |
+| `/api/markets/{coin}/history` | Every check step by step over 24 hours, 7 days or 30 days, with each one's usual range |
 | `/api/dexes/{slug}` | One DEX and its markets. The slug is the DEX name, or `core` for Hyperliquid's own markets |
 | `/api/alerts` | Recent alerts, newest first |
 | `/api/track-record` | Every public warning, and how volatile the hour after it was |
@@ -29,6 +31,7 @@ Core markets use their ticker: `BTC`, `HYPE`. Markets listed by other deployers 
 ```json
 {
   "generatedAt": 1790988000000,
+  "methodologyVersion": "1",
   "windowMinutes": 60,
   "from": 1790984400000,
   "to": 1790987940000,
@@ -95,13 +98,48 @@ Everything on the board row, plus:
 
 | Field | Meaning |
 | --- | --- |
-| `metrics` | Every measured number, including the ungraded ones: `depth2Usd`, `thinnestDepth2Usd`, `liquidationDistancePct`, `dailyVolPct`, `oiCapUse`, `oracleUnchangedOver10sShare`, `peers`, `coverageMinutes` |
+| `metrics` | Every measured number, including the ungraded ones: `depth2Usd`, `thinnestDepth2Usd`, `liquidationDistancePct`, `dailyVolPct`, `oiCapUse`, `oracleUnchangedOver10sShare`, `peers`, `coverageMinutes`, and the experimental `adjustedMoveCostUsd` with the `pullRate` behind it (`rate`, the share of large walls' USD pulled over 14 days, and `walls`, how many ended; `null` under 20) |
 | `grade` | The grade, `score`, `bands`, `reasons` (each with a sentence of `text`) and `notes` (context that isn't graded, such as an oracle that stays still while its underlying market is closed) |
-| `history` | Five-minute steps over 24 hours: `markPx`, `oraclePx`, largest `oracleGapBps`, `depth2Usd`, `oiUsd` |
+| `history` | Five-minute steps over 24 hours: `markPx`, `oraclePx`, largest `oracleGapBps`, `depth2Usd`, `oiUsd`. For every check and longer ranges, use `/history` below |
 | `alerts` | The market's 10 latest alerts |
 | `maxLeverage`, `dexName`, `dexSlug` | Market settings and the deployer |
 
 Unknown or delisted markets return `404`.
+
+### `GET /api/markets/{coin}/history`
+
+Every check step by step, measured the way the grade measures it but over each step instead of the last 60 minutes. `range` is `24h` (5-minute steps, the default), `7d` (hourly steps, so each point is that hour's own grade input) or `30d` (4-hour steps).
+
+```json
+{
+  "methodologyVersion": "1",
+  "coin": "xyz:SP500",
+  "range": "7d",
+  "stepMinutes": 60,
+  "from": 1792850400000,
+  "to": 1793451600000,
+  "liquidationBandPct": 1,
+  "peers": [],
+  "minuteBarsFrom": null,
+  "points": [
+    { "t": 1792850400000, "markPx": 6875.7, "oraclePx": 6873.1, "oiUsd": 501200000, "depth2Usd": 25400000, "depthToOi": 0.050678,
+      "moveCostUsd": 5710000, "adjustedMoveCostUsd": 5320000, "oracleGapBps": 4.1, "peerGapBps": null, "spreadBps": 2.3, "funding": 0.0000125 }
+  ],
+  "summary": { "moveCostUsd": { "p10": 2390000, "p50": 4000000, "p90": 6920000, "latest": 2440000 } },
+  "dailyMoves": [{ "day": 1790812800000, "movePct": 1.2 }]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `points` | One per step from `from` to `to`, with nulls where there's no data. Depth, cost to liquidation and spread are the step's medians, the oracle and peer gaps its 95th percentile, and prices, open interest and `funding` (the hourly rate) its last minute |
+| `moveCostUsd` | Orders on the thinner side within `liquidationBandPct`, the same band the grade uses |
+| `adjustedMoveCostUsd` | Experimental: the same with large walls counted at one minus the market's current pull rate. `null` without a pull rate, and before walls were recorded |
+| `summary` | For each metric in `points` except prices: the 10th, 50th and 90th percentile of the steps, and the latest step |
+| `minuteBarsFrom` | Minute bars are kept for 14 days. Steps before this time are built from 15-minute bars, whose depth and spread are averages. `null` when the whole range has minute bars |
+| `dailyMoves` | The last 30 finished days' largest move from the open, in %, whatever the range: what the big-moves check counts |
+
+A history is cached until the scorecard's next refresh, once a minute.
 
 ### `GET /api/alerts`
 
@@ -211,7 +249,7 @@ It reads "not graded" while a market has too little data, and "unknown market" (
 
 ## Errors
 
-Errors are JSON, `{ "error": "No live market named NOPE." }`, with the usual status codes: `400` for a malformed URL, `404` for an unknown market, DEX or path, `405` for anything but `GET` and `HEAD`, and `503` for the few seconds after a restart before the first scorecard is ready.
+Errors are JSON, `{ "error": "No live market named NOPE." }`, with the usual status codes: `400` for a malformed URL or an unknown `range`, `404` for an unknown market, DEX or path, `405` for anything but `GET` and `HEAD`, and `503` for the few seconds after a restart before the first scorecard is ready.
 
 ## Alert webhooks
 

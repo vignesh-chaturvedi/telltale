@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { scoreDatabase, tickerOf } from "../src/scoring.ts";
-import { T, seededStore } from "./seed.ts";
+import { loadPullRates, scoreDatabase, tickerOf } from "../src/scoring.ts";
+import { T, bar, seededStore } from "./seed.ts";
 
 test("tickers drop the DEX prefix", () => {
   assert.equal(tickerOf("xyz:AVGO"), "AVGO");
@@ -42,5 +42,25 @@ test("summarizes every DEX, including dormant ones", async () => {
   const core = card.dexes.find((d) => d.dex === "")!;
   assert.equal(core.collateral, "USDC");
   assert.equal(core.graded, 1);
+  store.close();
+});
+
+test("pull rates weigh 14 days of ended walls by USD, and the scorecard discounts walls by them", async () => {
+  const store = await seededStore();
+  const wall = store.db.prepare("INSERT INTO book_events VALUES (?, ?, ?, 'bid', 100, ?, 1e6, 0, ?)");
+  // BTC: 10 pulled walls of $600K and 20 that held of $300K, so half the USD was pulled.
+  for (let i = 0; i < 30; i++) wall.run("BTC", T - i * 60_000, i < 10 ? "pulled" : ["filled", "moved", "expired"][i % 3]!, i < 10 ? 600_000 : 300_000, T - i * 60_000);
+  wall.run("BTC", T - 15 * 86_400_000, "pulled", 9e6, T - 15 * 86_400_000);
+  for (let i = 0; i < 5; i++) wall.run("ETH", T - i * 60_000, "pulled", 300_000, T);
+  const rates = loadPullRates(store.db, T + 29 * 60_000);
+  assert.deepEqual(rates.get("BTC"), { rate: 0.5, walls: 30 }, "the 15-day-old wall is left out");
+  assert.equal(rates.has("ETH"), false, "5 walls aren't enough to measure");
+
+  // BTC trades at 40x, so the 1% band: $200K a side, $100K of the bids in a wall.
+  store.writeBars(Array.from({ length: 30 }, (_, i) => bar("BTC", i, { bidWall1: 1e5 })));
+  const btc = scoreDatabase(store.db, { windowMinutes: 30, minCoverageMinutes: 20, pullRates: rates }).markets.find((m) => m.coin === "BTC")!.metrics;
+  assert.equal(btc.liquidationMoveCostUsd, 2e5);
+  assert.equal(btc.adjustedMoveCostUsd, 1.5e5, "half the wall is discounted");
+  assert.deepEqual(btc.pullRate, { rate: 0.5, walls: 30 });
   store.close();
 });

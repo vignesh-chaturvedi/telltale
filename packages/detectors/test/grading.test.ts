@@ -16,6 +16,8 @@ const strong: MarketMetrics = {
   liquidationBandPct: 1,
   liquidationMoveCostUsd: 1e8,
   moveCostIsLowerBound: false,
+  adjustedMoveCostUsd: null,
+  pullRate: null,
   oracleGapBps: 3,
   oracleUnchangedP95Sec: null,
   oracleUnchangedOver10sShare: null,

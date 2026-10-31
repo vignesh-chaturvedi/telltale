@@ -60,6 +60,20 @@ test("move cost takes the thinner side at the liquidation band", () => {
   assert.equal(marketMetrics(input({ maxLeverage: 50 })).liquidationMoveCostUsd, 20_000);
 });
 
+test("the cancel-adjusted cost counts wall depth at one minus the pull rate", () => {
+  // At 10x the band is 5%: $90K of bids, $60K of it in walls, against $80K of asks with none.
+  const walls = { bidWall1: 0, askWall1: 0, bidWall2: 0, askWall2: 0, bidWall5: 60_000, askWall5: 0 };
+  const bars = Array.from({ length: 30 }, (_, i) => bar(i, walls));
+  const m = marketMetrics(input({ bars, pullRate: { rate: 0.5, walls: 40 } }));
+  assert.equal(m.liquidationMoveCostUsd, 80_000);
+  assert.equal(m.adjustedMoveCostUsd, 60_000, "the bids drop to 90K − 0.5 × 60K, below the asks' 80K");
+  assert.deepEqual(m.pullRate, { rate: 0.5, walls: 40 });
+  assert.equal(marketMetrics(input({ bars })).adjustedMoveCostUsd, null, "walls but no pull rate to apply");
+  const clear = Array.from({ length: 30 }, (_, i) => bar(i, { ...walls, bidWall5: 0 }));
+  assert.equal(marketMetrics(input({ bars: clear })).adjustedMoveCostUsd, 80_000, "no walls, so nothing to discount");
+  assert.equal(marketMetrics(input()).adjustedMoveCostUsd, null, "bars without wall data, such as replays");
+});
+
 test("flags the move cost as a lower bound when the book rarely reaches the band", () => {
   const short = input({ bars: Array.from({ length: 10 }, (_, i) => bar(i, { reachPct: 3 })) });
   assert.equal(marketMetrics(short).moveCostIsLowerBound, true);

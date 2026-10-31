@@ -1,6 +1,6 @@
 import { Info } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link, useParams, useSearchParams } from "react-router";
 import { AlertItem } from "../components/AlertItem.tsx";
 import { EmbedBadge } from "../components/EmbedBadge.tsx";
 import { Freshness } from "../components/Freshness.tsx";
@@ -8,9 +8,9 @@ import { GradeBadge } from "../components/GradeBadge.tsx";
 import { LineChart } from "../components/LineChart.tsx";
 import { Num } from "../components/Num.tsx";
 import { ErrorState, Loading, Skeleton } from "../components/States.tsx";
-import { dexPath, splitCoin, useApi, type MarketDetail } from "../lib/api.ts";
-import { bps, count, percent, price, score, usd, utcTime, type Formatted } from "../lib/format.ts";
-import { bandLines, GRADE_BADGE, GRADE_NAMES, GRADE_SUMMARY, GRADES, METRICS, type Grade, type MetricInfo } from "../lib/grades.ts";
+import { dexPath, splitCoin, useApi, type HistoryRange, type MarketDetail, type MarketHistory, type MetricSummary, type SummarizedMetric } from "../lib/api.ts";
+import { bps, count, percent, price, score, usd, utcDate, utcTime, wholePercent, type Formatted } from "../lib/format.ts";
+import { bandLines, GRADE_BADGE, GRADE_NAMES, GRADE_SUMMARY, GRADES, METRICS, type Grade, type MetricInfo, type MetricKey } from "../lib/grades.ts";
 import { NotFound } from "./NotFound.tsx";
 
 export function Market() {
@@ -80,6 +80,8 @@ function MarketSkeleton() {
 function MarketBody({ market, receivedAt }: { market: MarketDetail; receivedAt: number | null }) {
   const { metrics: m, grade: g } = market;
   const { ticker } = splitCoin(market.coin);
+  const [range, setRange] = useRange();
+  const history = useHistory(market.coin, range.value);
   return (
     <>
       <header className="space-y-4">
@@ -151,21 +153,30 @@ function MarketBody({ market, receivedAt }: { market: MarketDetail; receivedAt: 
       )}
 
       <section aria-labelledby="metrics-title" className="space-y-4">
-        <div>
-          <h2 id="metrics-title" className="text-lg font-semibold">
-            Graded metrics
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Over the {market.windowMinutes} minutes to {utcTime(market.to)}.{" "}
-            <Link to="/methodology" className="link">
-              How the bands were set
-            </Link>
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="max-w-2xl">
+            <h2 id="metrics-title" className="text-lg font-semibold">
+              Graded metrics
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The grade uses the {market.windowMinutes} minutes to {utcTime(market.to)}. The charts show the last {range.span} in {range.step} steps: the shading is
+              where each check usually sits (the middle 80% of steps), the dashed lines are grade limits.
+              <HistoryNote history={history.data} />{" "}
+              <Link to="/methodology" className="link">
+                How the bands were set
+              </Link>
+            </p>
+          </div>
+          <RangeSwitch range={range} onChange={setRange} />
         </div>
+        {history.error && !history.data && <HistoryError history={history} />}
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {METRICS.map((info) => (
             <li key={info.key}>
-              <MetricCard info={info} value={info.format(m)} band={g.bands[info.key] ?? null} extra={metricExtra(info, market)} />
+              <MetricCard info={info} value={info.format(m)} band={g.bands[info.key] ?? null} extra={metricExtra(info, market)}>
+                <CheckHistory info={info} market={market} history={history} range={range} />
+                {info.key === "liquidationMoveCost" && <CancelAdjusted metrics={m} />}
+              </MetricCard>
             </li>
           ))}
         </ul>
@@ -190,7 +201,7 @@ function MarketBody({ market, receivedAt }: { market: MarketDetail; receivedAt: 
         </dl>
       </section>
 
-      <History market={market} />
+      <Activity history={history} range={range} onRange={setRange} />
 
       <EmbedBadge coin={market.coin} />
     </>
@@ -204,7 +215,7 @@ function metricExtra(info: MetricInfo, market: MarketDetail): string | null {
   return null;
 }
 
-function MetricCard({ info, value, band, extra }: { info: MetricInfo; value: Formatted; band: Grade | null; extra: string | null }) {
+function MetricCard({ info, value, band, extra, children }: { info: MetricInfo; value: Formatted; band: Grade | null; extra: string | null; children: ReactNode }) {
   return (
     <article className="flex h-full flex-col gap-3 rounded-lg border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
@@ -217,6 +228,7 @@ function MetricCard({ info, value, band, extra }: { info: MetricInfo; value: For
       <p className="text-2xl font-semibold">
         <Num value={value} />
       </p>
+      {children}
       <p className="text-xs text-muted-foreground">{info.help}</p>
       {extra && <p className="text-xs text-muted-foreground">{extra}</p>}
       <ol className="mt-auto grid grid-cols-5 gap-1 pt-1" aria-label="Grade bands">
@@ -246,57 +258,274 @@ function Detail({ term, value }: { term: ReactNode; value: Formatted }) {
   );
 }
 
-function History({ market }: { market: MarketDetail }) {
-  const h = market.history;
-  const times = h.map((p) => p.t);
-  const first = h[0]?.t;
-  const covered = first !== undefined && market.to - first < 23 * 3600_000;
-  const depthShare = h.map((p) => (p.depth2Usd !== null && p.oiUsd ? p.depth2Usd / p.oiUsd : null));
-  const lastGap = [...h].reverse().find((p) => p.oracleGapBps !== null)?.oracleGapBps ?? null;
-  const lastShare = [...depthShare].reverse().find((v) => v !== null) ?? null;
-  const lastMark = [...h].reverse().find((p) => p.markPx !== null)?.markPx ?? null;
+interface Range {
+  value: HistoryRange;
+  label: string;
+  span: string;
+  step: string;
+}
+
+const RANGES: readonly Range[] = [
+  { value: "24h", label: "24h", span: "24 hours", step: "5-minute" },
+  { value: "7d", label: "7d", span: "7 days", step: "hourly" },
+  { value: "30d", label: "30d", span: "30 days", step: "4-hour" },
+];
+const DEFAULT_RANGE = RANGES[1]!;
+
+/** The range is kept in the URL (?range=24h), so a shared link opens on the same charts. */
+function useRange(): [Range, (value: HistoryRange) => void] {
+  const [params, setParams] = useSearchParams();
+  const range = RANGES.find((r) => r.value === params.get("range")) ?? DEFAULT_RANGE;
+  const set = (value: HistoryRange) => {
+    const next = new URLSearchParams(params);
+    if (value === DEFAULT_RANGE.value) next.delete("range");
+    else next.set("range", value);
+    setParams(next, { replace: true, preventScrollReset: true });
+  };
+  return [range, set];
+}
+
+interface HistoryState {
+  data: MarketHistory | null;
+  /** True while a newly chosen range loads, with the previous range still on screen. */
+  switching: boolean;
+  error: Error | null;
+  retry: () => void;
+}
+
+function useHistory(coin: string, range: HistoryRange): HistoryState {
+  const { data, loading, error, retry } = useApi<MarketHistory>(`/api/markets/${encodeURIComponent(coin)}/history?range=${range}`);
+  const [previous, setPrevious] = useState<MarketHistory | null>(null);
+  useEffect(() => {
+    if (data) setPrevious(data);
+  }, [data]);
+  const held = loading && previous?.coin === coin ? previous : null;
+  return { data: data ?? held, switching: !data && held !== null, error, retry };
+}
+
+function RangeSwitch({ range, onChange }: { range: Range; onChange: (value: HistoryRange) => void }) {
+  return (
+    <fieldset className="flex rounded-md border p-0.5">
+      <legend className="sr-only">Chart range</legend>
+      {RANGES.map((r) => (
+        <button
+          key={r.value}
+          type="button"
+          aria-pressed={r.value === range.value}
+          onClick={() => onChange(r.value)}
+          className="min-h-10 rounded-sm px-3.5 font-mono text-sm text-muted-foreground transition-colors hover:text-foreground aria-pressed:bg-secondary aria-pressed:text-foreground"
+        >
+          {r.label}
+          <span className="sr-only"> ({r.span})</span>
+        </button>
+      ))}
+    </fieldset>
+  );
+}
+
+function HistoryNote({ history }: { history: MarketHistory | null }) {
+  if (!history?.minuteBarsFrom) return null;
+  return <> Before {utcDate(history.minuteBarsFrom)}, steps are built from 15-minute bars, so depth is averaged.</>;
+}
+
+function HistoryError({ history }: { history: HistoryState }) {
+  return (
+    <p className="text-sm text-muted-foreground" role="status">
+      Couldn't load the history: {history.error!.message}{" "}
+      <button type="button" onClick={history.retry} className="link">
+        Try again
+      </button>
+    </p>
+  );
+}
+
+/** Each check's history series; big moves is charted from daily candles instead. */
+const CHECK_SERIES: Record<Exclude<MetricKey, "bigMoves">, { key: SummarizedMetric; format: (v: number) => Formatted; now: (m: MarketDetail["metrics"]) => number | null }> = {
+  depthToOi: { key: "depthToOi", format: percent, now: (m) => m.depthToOi },
+  liquidationMoveCost: { key: "moveCostUsd", format: (v) => usd(v), now: (m) => m.liquidationMoveCostUsd },
+  oracleGap: { key: "oracleGapBps", format: bps, now: (m) => m.oracleGapBps },
+  peerGap: { key: "peerGapBps", format: bps, now: (m) => m.peerGapBps },
+};
+
+const shaded = (s: MetricSummary, scale = 1) => (s.p10 !== null && s.p90 !== null ? { lo: s.p10 * scale, hi: s.p90 * scale } : null);
+
+function CheckHistory({ info, market, history, range }: { info: MetricInfo; market: MarketDetail; history: HistoryState; range: Range }) {
+  const h = history.data;
+  if (!h) return history.error ? null : <Skeleton className="h-36" />;
+  const busy = history.switching ? "opacity-50" : "";
+
+  if (info.key === "bigMoves") {
+    const big = h.dailyMoves.filter((d) => d.movePct > 50).length;
+    return (
+      <div aria-busy={history.switching} className={`space-y-1.5 transition-opacity motion-reduce:transition-none ${busy}`}>
+        <LineChart
+          bare
+          dates
+          title="Largest move from each day's open"
+          summary={`${big} of the last ${h.dailyMoves.length} finished days moved more than 50% from the open.`}
+          times={h.dailyMoves.map((d) => d.day)}
+          series={[{ label: "Move", values: h.dailyMoves.map((d) => d.movePct / 100), color: "var(--primary)" }]}
+          format={percent}
+          refs={[{ value: 0.5, label: "50%" }]}
+          empty="Not enough finished days yet."
+          height={88}
+        />
+        <p className="text-xs text-muted-foreground">The last 30 finished days, whatever the range.</p>
+      </div>
+    );
+  }
+
+  // The card already says no other deployer lists the asset.
+  if (info.key === "peerGap" && h.peers.length === 0) return null;
+  const { key, format, now } = CHECK_SERIES[info.key];
+  const usual = h.summary[key];
+  const current = now(market.metrics);
+  const position = current === null || usual.p10 === null || usual.p90 === null ? "" : current < usual.p10 ? " Lower than usual now." : current > usual.p90 ? " Higher than usual now." : "";
+  const latest = usual.latest === null ? "no data yet" : format(usual.latest).ariaLabel;
+  const adjusted = info.key === "liquidationMoveCost" && h.points.some((p) => p.adjustedMoveCostUsd !== null) ? h.points.map((p) => p.adjustedMoveCostUsd) : null;
+  return (
+    <div aria-busy={history.switching} className={`space-y-1.5 transition-opacity motion-reduce:transition-none ${busy}`}>
+      <LineChart
+        bare
+        title={`Last ${range.span}`}
+        summary={`${info.name} over the last ${range.span}, ${range.step} steps: latest ${latest}${usual.p10 !== null && usual.p90 !== null ? `, usually ${format(usual.p10).ariaLabel} to ${format(usual.p90).ariaLabel}` : ""}.`}
+        times={h.points.map((p) => p.t)}
+        series={[
+          { label: adjusted ? "Raw" : info.name, values: h.points.map((p) => p[key]), color: "var(--primary)" },
+          ...(adjusted ? [{ label: "Cancel-adjusted", values: adjusted, color: "var(--muted-foreground)", dashed: true }] : []),
+        ]}
+        format={format}
+        refs={bandLines(info.key)}
+        band={shaded(usual)}
+        height={88}
+      />
+      {usual.p10 !== null && usual.p90 !== null && (
+        <p className="text-xs text-muted-foreground">
+          Usually <Num value={format(usual.p10)} /> to <Num value={format(usual.p90)} />.{position}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Experimental and not graded: the cost if large walls are pulled as often as they have been. */
+function CancelAdjusted({ metrics: m }: { metrics: MarketDetail["metrics"] }) {
+  if (m.liquidationMoveCostUsd === null) return null;
+  const { adjustedMoveCostUsd: adjusted, pullRate: rate } = m;
+  let text: ReactNode;
+  if (adjusted !== null && rate) {
+    text = (
+      <>
+        Large walls here were pulled before the price reached them <Num value={wholePercent(rate.rate)} /> of the time by USD (
+        <Num value={count(rate.walls, ["wall", "walls"])} /> in 14 days), so wall depth counts at <Num value={wholePercent(1 - rate.rate)} />.
+      </>
+    );
+  } else if (adjusted !== null) text = "No large walls stood within the band, so cancels don't change it.";
+  else if (!rate) text = "Large walls stood within the band, but too few have ended here to measure how often they're pulled.";
+  else text = "Wall depth isn't recorded for this window yet.";
+  return (
+    <div className="rounded-md bg-muted px-3 py-2 text-xs">
+      <p className="flex items-baseline justify-between gap-3">
+        <span className="font-medium">
+          Cancel-adjusted <span className="font-normal text-muted-foreground">· experimental</span>
+        </span>
+        <Num value={usd(adjusted)} className="text-sm font-semibold" />
+      </p>
+      <p className="mt-1 text-muted-foreground">
+        {text} Not graded.{" "}
+        <Link to="/methodology#cancel-adjusted-cost-experimental" className="link">
+          How it's worked out
+        </Link>
+      </p>
+    </div>
+  );
+}
+
+/** Funding is stored as the hourly rate; charts show it per year. */
+const HOURS_PER_YEAR = 24 * 365;
+
+function Activity({ history, range, onRange }: { history: HistoryState; range: Range; onRange: (value: HistoryRange) => void }) {
+  const h = history.data;
+  const times = h?.points.map((p) => p.t) ?? [];
+  const series = (key: "oiUsd" | "depth2Usd" | "spreadBps" | "funding", scale = 1) => h?.points.map((p) => (p[key] === null ? null : p[key]! * scale)) ?? [];
+  const latest = (s: MetricSummary | undefined, format: (v: number) => Formatted, scale = 1) => (s?.latest == null ? "unknown" : format(s.latest * scale).ariaLabel);
+  const lastMark = h?.points.findLast((p) => p.markPx !== null)?.markPx ?? null;
 
   return (
-    <section aria-labelledby="history-title" className="space-y-4">
-      <div>
-        <h2 id="history-title" className="text-lg font-semibold">
-          Last 24 hours
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Five-minute steps.{covered && first !== undefined ? ` Data starts at ${utcTime(first, true)}.` : ""}
-        </p>
+    <section aria-labelledby="activity-title" className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="max-w-2xl">
+          <h2 id="activity-title" className="text-lg font-semibold">
+            Price and activity
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            The last {range.span} in {range.step} steps. Shading is the usual range.
+            <HistoryNote history={h} />
+          </p>
+        </div>
+        <RangeSwitch range={range} onChange={onRange} />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="lg:col-span-2">
+      {!h ? (
+        history.error ? (
+          <HistoryError history={history} />
+        ) : (
+          <Loading label="Loading the history">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Skeleton className="h-64 lg:col-span-2" />
+              <Skeleton className="h-52" />
+              <Skeleton className="h-52" />
+            </div>
+          </Loading>
+        )
+      ) : (
+        <div aria-busy={history.switching} className={`grid gap-4 transition-opacity motion-reduce:transition-none lg:grid-cols-2 ${history.switching ? "opacity-50" : ""}`}>
+          <div className="lg:col-span-2">
+            <LineChart
+              title="Mark and oracle price"
+              summary={`The latest mark price is ${lastMark === null ? "unknown" : price(lastMark).ariaLabel}.`}
+              times={times}
+              series={[
+                { label: "Mark", values: h.points.map((p) => p.markPx), color: "var(--primary)" },
+                { label: "Oracle", values: h.points.map((p) => p.oraclePx), color: "var(--muted-foreground)", dashed: true },
+              ]}
+              format={(v) => price(v)}
+              height={180}
+            />
+          </div>
           <LineChart
-            title="Mark and oracle price"
-            summary={`The latest mark price is ${lastMark === null ? "unknown" : price(lastMark).ariaLabel}.`}
+            title="Open interest"
+            summary={`Open interest is now ${latest(h.summary.oiUsd, usd)}.`}
             times={times}
-            series={[
-              { label: "Mark", values: h.map((p) => p.markPx), color: "var(--primary)" },
-              { label: "Oracle", values: h.map((p) => p.oraclePx), color: "var(--muted-foreground)", dashed: true },
-            ]}
-            format={(v) => price(v)}
-            height={180}
+            series={[{ label: "Open interest", values: series("oiUsd"), color: "var(--primary)" }]}
+            format={(v) => usd(v)}
+            band={shaded(h.summary.oiUsd)}
+          />
+          <LineChart
+            title="Depth within ±2%, both sides"
+            summary={`Depth within 2% is now ${latest(h.summary.depth2Usd, usd)}.`}
+            times={times}
+            series={[{ label: "Depth", values: series("depth2Usd"), color: "var(--primary)" }]}
+            format={(v) => usd(v)}
+            band={shaded(h.summary.depth2Usd)}
+          />
+          <LineChart
+            title="Impact spread"
+            summary={`The impact spread is now ${latest(h.summary.spreadBps, bps)}.`}
+            times={times}
+            series={[{ label: "Spread", values: series("spreadBps"), color: "var(--primary)" }]}
+            format={bps}
+            band={shaded(h.summary.spreadBps)}
+          />
+          <LineChart
+            title="Funding, per year"
+            summary={`Funding is now ${latest(h.summary.funding, percent, HOURS_PER_YEAR)} a year.`}
+            times={times}
+            series={[{ label: "Funding", values: series("funding", HOURS_PER_YEAR), color: "var(--primary)" }]}
+            format={percent}
+            band={shaded(h.summary.funding, HOURS_PER_YEAR)}
           />
         </div>
-        <LineChart
-          title="Oracle gap, largest in each step"
-          summary={`The latest gap between the mid and oracle price is ${lastGap === null ? "unknown" : bps(lastGap).ariaLabel}.`}
-          times={times}
-          series={[{ label: "Gap", values: h.map((p) => p.oracleGapBps), color: "var(--primary)" }]}
-          format={bps}
-          refs={bandLines("oracleGap")}
-        />
-        <LineChart
-          title="Depth within ±2% against open interest"
-          summary={`Depth is now ${lastShare === null ? "unknown" : percent(lastShare).ariaLabel} of open interest.`}
-          times={times}
-          series={[{ label: "Depth / OI", values: depthShare, color: "var(--primary)" }]}
-          format={percent}
-          refs={bandLines("depthToOi")}
-        />
-      </div>
+      )}
     </section>
   );
 }

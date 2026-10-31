@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Level } from "../src/book.ts";
-import { DEFAULT_WALL_RULES, WallTracker, pulledWallSignal, type WallEvent } from "../src/walls.ts";
+import { summarizeBook, type Level } from "../src/book.ts";
+import { DEFAULT_WALL_RULES, WallTracker, pulledWallSignal, wallDepth, type WallEvent } from "../src/walls.ts";
 
 const T = 1_790_000_000_000;
 const S = 5_000;
@@ -86,15 +86,15 @@ function withHistory(): { tracker: WallTracker; t: number } {
   return { tracker, t };
 }
 
-test("an alert needs a wall far beyond the market's usual ones, most of its side, standing at least 30 s", () => {
+test("an alert needs a wall far beyond the market's usual ones, most of its side, standing at least 90 s", () => {
   const { tracker, t } = withHistory();
   const huge = { 99.55: 2_500_000 };
-  const events = run([...span(t, t + 60_000, huge), ...span(t + 60_000, t + 90_000)], [], tracker);
+  const events = run([...span(t, t + 120_000, huge), ...span(t + 120_000, t + 150_000)], [], tracker);
   const pulled = events.find((e) => e.kind === "pulled")!;
   assert.equal(pulled.typicalUsd, 120_000);
   const signal = pulledWallSignal(pulled, "")!;
-  assert.equal(signal.severity, "critical");
-  assert.equal(signal.title, "A $2.5M bid wall was pulled after 1 min");
+  assert.equal(signal.severity, "warning", "pulled walls are never critical, however large");
+  assert.equal(signal.title, "A $2.5M bid wall was pulled after 2 min");
   assert.match(signal.detail, /87% of the bid side within ±2% of mid and 21× this market's usual large order/);
   assert.match(signal.detail, /^A bid of \$2\.5M/);
   assert.match(pulledWallSignal({ ...pulled, side: "ask" }, "")!.detail, /^An ask of \$2\.5M/);
@@ -104,9 +104,23 @@ test("ordinary-sized pulled walls, brief ones, and walls in markets without hist
   const { tracker, t } = withHistory();
   const ordinary = run([...span(t, t + 60_000, { 99.55: 300_000 }), ...span(t + 60_000, t + 90_000)], [], tracker).find((e) => e.kind === "pulled")!;
   assert.equal(pulledWallSignal(ordinary, ""), null, "$320K is under twice the rest of its side");
-  const brief = run([...span(t + 100_000, t + 120_000, { 99.55: 2_500_000 }), ...span(t + 120_000, t + 150_000)], [], tracker).find((e) => e.kind === "pulled")!;
-  assert.equal(pulledWallSignal(brief, ""), null, "stood under 30 s");
+  const brief = run([...span(t + 100_000, t + 160_000, { 99.55: 2_500_000 }), ...span(t + 160_000, t + 190_000)], [], tracker).find((e) => e.kind === "pulled")!;
+  assert.equal(brief.at - brief.firstSeen, 60_000);
+  assert.equal(pulledWallSignal(brief, ""), null, "stood a minute, under 90 s");
   const fresh = run([...span(0, 60_000, { 99.55: 2_500_000 }), ...span(60_000, 90_000)]).find((e) => e.kind === "pulled")!;
   assert.equal(fresh.typicalUsd, null);
   assert.equal(pulledWallSignal(fresh, ""), null, "no usual size to compare against yet");
+});
+
+test("wall depth counts the large levels within each band, by the tracker's test", () => {
+  const { bids, asks } = book({ 99.55: 400_000, 98.55: 300_000, 100.45: 100_000 });
+  const walls = wallDepth(bids, asks, summarizeBook(bids, asks), 250_000);
+  const round = (r: Record<number, number>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Math.round(v)]));
+  assert.deepEqual(round(walls.bid), { 1: 420_000, 2: 740_000, 5: 740_000 }, "99.55 is within 1%, 98.55 within 2%");
+  assert.deepEqual(round(walls.ask), { 1: 0, 2: 0, 5: 0 }, "$120K is under the $250K floor");
+
+  // Every level is $300K: big, but no bigger than the rest of the book, so not a wall.
+  const even = bids.map((l) => ({ px: l.px, sz: 300_000 / l.px }));
+  const evenAsks = asks.map((l) => ({ px: l.px, sz: 300_000 / l.px }));
+  assert.deepEqual(wallDepth(even, evenAsks, summarizeBook(even, evenAsks), 250_000).bid, { 1: 0, 2: 0, 5: 0 });
 });

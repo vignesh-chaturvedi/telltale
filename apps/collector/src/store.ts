@@ -8,7 +8,7 @@ import { BAR_COLUMNS } from "./scoring.ts";
 import type { MidSeries, Outcome } from "./track.ts";
 import { dexConfig, type Universe } from "./universe.ts";
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /** Version 1: the Phase 1 schema. Later versions are applied by MIGRATIONS. */
 export const SCHEMA_V1 = `
@@ -194,6 +194,16 @@ const MIGRATIONS = [
     control_ranks TEXT NOT NULL
   );
   `,
+  // USD in large walls within each depth band, for the cancel-adjusted cost to liquidation. Adding
+  // columns doesn't rewrite the table; earlier minutes read NULL.
+  `
+  ALTER TABLE minute_bars ADD COLUMN bid_wall_1 REAL;
+  ALTER TABLE minute_bars ADD COLUMN ask_wall_1 REAL;
+  ALTER TABLE minute_bars ADD COLUMN bid_wall_2 REAL;
+  ALTER TABLE minute_bars ADD COLUMN ask_wall_2 REAL;
+  ALTER TABLE minute_bars ADD COLUMN bid_wall_5 REAL;
+  ALTER TABLE minute_bars ADD COLUMN ask_wall_5 REAL;
+  `,
 ];
 
 export const ROLLUP_MS = 15 * 60_000;
@@ -235,7 +245,8 @@ export interface HealthRow {
 
 const USD_FIELDS = [
   "dayNtlVlm", "bidDepth1", "askDepth1", "bidDepth2", "askDepth2", "bidDepth5", "askDepth5",
-  "minDepth2", "largestLevelUsd", "buyNtl", "sellNtl", "maxTradeNtl",
+  "minDepth2", "largestLevelUsd", "buyNtl", "sellNtl", "maxTradeNtl", "bidWall1", "askWall1", "bidWall2", "askWall2",
+  "bidWall5", "askWall5",
 ] as const satisfies readonly (keyof MinuteBar)[];
 
 /** A stored alert. Minute alerts stay open while their condition holds; events open and close at once. */
@@ -306,7 +317,7 @@ export class Store {
         :coin, :ts, :ctxSource, :ctxUpdates, :oraclePx, :markPx, :midPx, :openInterest, :funding, :premium,
         :dayNtlVlm, :oracleChanges, :oracleMaxGapMs, :bookSource, :bookUpdates, :bestBid, :bestAsk, :spreadBps,
         :bidDepth1, :askDepth1, :bidDepth2, :askDepth2, :bidDepth5, :askDepth5, :minDepth2, :largestLevelUsd,
-        :reachPct, :trades, :buyNtl, :sellNtl, :maxTradeNtl
+        :reachPct, :trades, :buyNtl, :sellNtl, :maxTradeNtl, :bidWall1, :askWall1, :bidWall2, :askWall2, :bidWall5, :askWall5
       )`);
     this.lastConfig = this.db.prepare("SELECT hash, body FROM config_snapshots WHERE dex = ? ORDER BY ts DESC LIMIT 1");
     this.insertConfig = this.db.prepare("INSERT OR REPLACE INTO config_snapshots (dex, ts, hash, body) VALUES (?, ?, ?, ?)");

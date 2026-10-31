@@ -38,6 +38,12 @@ const bar: MinuteBar = {
   minDepth2: 7000.4,
   largestLevelUsd: 999.5,
   reachPct: 0.02,
+  bidWall1: 0,
+  askWall1: 300_000.4,
+  bidWall2: 0,
+  askWall2: 300_000.4,
+  bidWall5: null,
+  askWall5: null,
   trades: 3,
   buyNtl: 10.4,
   sellNtl: 0,
@@ -55,6 +61,7 @@ test("writes bars with USD amounts rounded to whole dollars", () => {
   assert.equal(row.buy_ntl, 10);
   assert.equal(row.oracle_px, 7672.3, "prices keep full precision");
   assert.equal(row.funding, 0.0000018507);
+  assert.deepEqual([row.bid_wall_1, row.ask_wall_2, row.ask_wall_5], [0, 300000, null], "wall depth is USD too");
   store.close();
 });
 

@@ -1,5 +1,5 @@
 import { useId, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { utcTime, type Formatted } from "../lib/format.ts";
+import { utcDate, utcTime, type Formatted } from "../lib/format.ts";
 
 export interface Series {
   label: string;
@@ -26,6 +26,14 @@ interface Props {
   refs?: readonly { value: number; label: string }[];
   /** Vertical lines at moments in time: alerts, and the crash in a replay. */
   markers?: readonly Marker[];
+  /** A shaded band across the chart, for where the values usually sit. */
+  band?: { lo: number; hi: number } | null;
+  /** One point per day, so points are labeled by date alone. */
+  dates?: boolean;
+  /** Drop the card frame, for a chart inside another card. */
+  bare?: boolean;
+  /** What to say when there's nothing to plot. */
+  empty?: string;
   height?: number;
 }
 
@@ -62,17 +70,21 @@ function paths(values: readonly (number | null)[], x: (i: number) => number, y: 
   return d;
 }
 
-export function LineChart({ title, summary, times, series, format, refs = [], markers = [], height = 140 }: Props) {
+const DAY = 86_400_000;
+
+export function LineChart({ title, summary, times, series, format, refs = [], markers = [], band = null, dates = false, bare = false, empty, height = 140 }: Props) {
   const id = useId();
   const [cursor, setCursor] = useState<number | null>(null);
   const all = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
   const n = times.length;
 
+  const frame = bare ? "" : "rounded-lg border bg-card p-4";
+
   if (all.length < 2) {
     return (
-      <figure className="rounded-lg border bg-card p-4">
+      <figure className={frame}>
         <figcaption className="text-sm font-medium">{title}</figcaption>
-        <p className="mt-6 mb-4 text-center text-sm text-muted-foreground">Not enough data yet. The chart fills in as the collector runs.</p>
+        <p className="mt-6 mb-4 text-center text-sm text-muted-foreground">{empty ?? "Not enough data yet. The chart fills in as the collector runs."}</p>
       </figure>
     );
   }
@@ -86,6 +98,10 @@ export function LineChart({ title, summary, times, series, format, refs = [], ma
   })();
   const at = cursor ?? lastIndex;
   const visibleRefs = refs.filter((r) => r.value > lo && r.value < hi);
+  const shade = band && band.hi >= lo && band.lo <= hi ? { top: y(Math.min(band.hi, hi)), bottom: y(Math.max(band.lo, lo)) } : null;
+  // Points a few days apart are told apart by date; within a day or two, by time.
+  const byDate = dates || (times[n - 1] ?? 0) - (times[0] ?? 0) >= 2 * DAY;
+  const axisLabel = (t: number | undefined) => (byDate ? utcDate(t) : utcTime(t));
 
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
@@ -116,13 +132,13 @@ export function LineChart({ title, summary, times, series, format, refs = [], ma
   const rows = Math.max(0, ...placed.map((m) => m.row + 1));
 
   return (
-    <figure className="rounded-lg border bg-card p-4">
+    <figure className={frame}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <figcaption id={`${id}-title`} className="text-sm font-medium">
           {title}
         </figcaption>
         <p className="text-xs text-muted-foreground" aria-hidden="true">
-          <span className="font-mono tabular-nums">{utcTime(times[at], true)}</span>
+          <span className="font-mono tabular-nums">{dates ? utcDate(times[at]) : utcTime(times[at], true)}</span>
           {series.map((s) => {
             const v = s.values[at];
             return (
@@ -151,6 +167,7 @@ export function LineChart({ title, summary, times, series, format, refs = [], ma
           Use the left and right arrow keys to read values.
         </span>
         <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" className="absolute inset-0 size-full overflow-visible" aria-hidden="true">
+          {shade && <rect x={0} width={W} y={shade.top} height={Math.max(1, shade.bottom - shade.top)} fill="var(--primary)" fillOpacity={0.09} />}
           {visibleRefs.map((r) => (
             <line key={r.label} x1={0} x2={W} y1={y(r.value)} y2={y(r.value)} stroke="var(--border)" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />
           ))}
@@ -215,8 +232,8 @@ export function LineChart({ title, summary, times, series, format, refs = [], ma
         </span>
       </div>
       <div className="mt-2 flex justify-between font-mono text-[11px] text-muted-foreground" aria-hidden="true">
-        <span>{utcTime(times[0])}</span>
-        <span>{utcTime(times[n - 1])}</span>
+        <span>{axisLabel(times[0])}</span>
+        <span>{axisLabel(times[n - 1])}</span>
       </div>
     </figure>
   );

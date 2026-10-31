@@ -35,6 +35,8 @@ export interface BoardDex extends DexSummary {
 export interface Board {
   /** When the API computed this, epoch ms. */
   generatedAt: number;
+  /** The version of docs/methodology.md these numbers follow. */
+  methodologyVersion: string;
   windowMinutes: number;
   /** First and last minute of the window, epoch ms. */
   from: number;
@@ -57,8 +59,78 @@ export interface HistoryPoint {
   oiUsd: number | null;
 }
 
+/** The ranges `/api/markets/{coin}/history` serves. */
+export type HistoryRange = "24h" | "7d" | "30d";
+
+/**
+ * One step of a market's history. Each check is measured the way the grade measures it, over the
+ * step instead of the last 60 minutes: medians of depth, the 95th percentile of gaps, and the
+ * last minute's prices, open interest and funding.
+ */
+export interface MetricPoint {
+  t: number;
+  markPx: number | null;
+  oraclePx: number | null;
+  oiUsd: number | null;
+  /** USD resting within ±2% of mid, both sides. */
+  depth2Usd: number | null;
+  depthToOi: number | null;
+  /** USD on the thinner side within the liquidation band: what it takes to push the price that far. */
+  moveCostUsd: number | null;
+  /** Experimental: the same with wall depth counted at (1 − the market's current pull rate); null without wall data or a pull rate. */
+  adjustedMoveCostUsd: number | null;
+  /** |mid − oracle| / oracle, bps. */
+  oracleGapBps: number | null;
+  /** |oracle − peers' median oracle|, bps; null without peers. */
+  peerGapBps: number | null;
+  spreadBps: number | null;
+  /** Hourly funding rate, as a fraction. */
+  funding: number | null;
+}
+
+export type SummarizedMetric = Exclude<keyof MetricPoint, "t" | "markPx" | "oraclePx">;
+
+/** A metric's spread over the range's steps, and the latest step. */
+export interface MetricSummary {
+  p10: number | null;
+  p50: number | null;
+  p90: number | null;
+  latest: number | null;
+}
+
+/** A finished day's largest move from its open, what the big-moves check counts. */
+export interface DayMove {
+  day: number;
+  /** max(high / open − 1, 1 − low / open), %. */
+  movePct: number;
+}
+
+export interface MarketHistory {
+  generatedAt: number;
+  /** The version of docs/methodology.md these numbers follow. */
+  methodologyVersion: string;
+  coin: string;
+  range: HistoryRange;
+  stepMinutes: number;
+  /** First and last step, epoch ms. */
+  from: number;
+  to: number;
+  /** The depth band cost to liquidation is measured in (1, 2 or 5%), the same as the grade's. */
+  liquidationBandPct: number;
+  peers: string[];
+  /** Steps before this are built from 15-minute bars, whose depth and spread are averages; null when the whole range has minute bars. */
+  minuteBarsFrom: number | null;
+  /** One per step from `from` to `to`; steps without data hold nulls. */
+  points: MetricPoint[];
+  summary: Record<SummarizedMetric, MetricSummary>;
+  /** The last 30 finished days, whatever the range. */
+  dailyMoves: DayMove[];
+}
+
 export interface MarketDetail {
   generatedAt: number;
+  /** The version of docs/methodology.md these numbers follow. */
+  methodologyVersion: string;
   windowMinutes: number;
   from: number;
   to: number;
@@ -77,6 +149,8 @@ export interface MarketDetail {
 
 export interface DexDetail {
   generatedAt: number;
+  /** The version of docs/methodology.md these numbers follow. */
+  methodologyVersion: string;
   windowMinutes: number;
   dex: BoardDex;
   markets: BoardMarket[];

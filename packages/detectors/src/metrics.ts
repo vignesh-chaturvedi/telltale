@@ -20,6 +20,21 @@ export interface BarInput {
   askDepth5: number | null;
   minDepth2: number | null;
   reachPct: number | null;
+  /** USD in walls within each band (see wallDepth); absent where walls weren't measured, such as replays. */
+  bidWall1?: number | null;
+  askWall1?: number | null;
+  bidWall2?: number | null;
+  askWall2?: number | null;
+  bidWall5?: number | null;
+  askWall5?: number | null;
+}
+
+/** How often a market's large walls were pulled before the price reached them. */
+export interface PullRate {
+  /** Share of the walls' USD that was pulled. */
+  rate: number;
+  /** Walls in the sample. */
+  walls: number;
 }
 
 export interface DailyCandleInput {
@@ -46,6 +61,8 @@ export interface MarketInput {
   /** Up to 30 finished days, oldest first. */
   candles: readonly DailyCandleInput[];
   peers: readonly PeerInput[];
+  /** The market's pull rate, or `null` when too few of its walls have ended to measure one. */
+  pullRate?: PullRate | null;
 }
 
 export interface MarketMetrics {
@@ -70,6 +87,12 @@ export interface MarketMetrics {
   liquidationMoveCostUsd: number | null;
   /** True when the visible book usually doesn't reach the band, so the cost is a lower bound. */
   moveCostIsLowerBound: boolean;
+  /**
+   * Experimental, not graded: the same cost with wall depth counted at (1 − pull rate). Equal to the
+   * raw cost when no walls stood in the band; `null` without wall data, or with walls but no pull rate.
+   */
+  adjustedMoveCostUsd: number | null;
+  pullRate: PullRate | null;
   /** 95th percentile of |mid − oracle| / oracle, bps. */
   oracleGapBps: number | null;
   /** 95th percentile of the longest unchanged-oracle stretch per minute, seconds. HIP-3 streams only. */
@@ -102,6 +125,8 @@ export function liquidationBand(maxLeverage: number): { distancePct: number; ban
 
 const depth = (b: BarInput, band: DepthBand, side: "bid" | "ask"): number | null =>
   b[`${side}Depth${band}` as keyof BarInput] as number | null;
+const wall = (b: BarInput, band: DepthBand, side: "bid" | "ask"): number | null =>
+  (b[`${side}Wall${band}` as keyof BarInput] as number | null | undefined) ?? null;
 
 export function marketMetrics(input: MarketInput): MarketMetrics {
   const { bars } = input;
@@ -118,6 +143,13 @@ export function marketMetrics(input: MarketInput): MarketMetrics {
     return bid === null || ask === null ? null : Math.min(bid, ask);
   });
   const shortReach = booked.filter((b) => b.reachPct !== null && b.reachPct < bandPct).length;
+  const walled = booked.filter((b) => [depth(b, bandPct, "bid"), depth(b, bandPct, "ask"), wall(b, bandPct, "bid"), wall(b, bandPct, "ask")].every((x) => x !== null));
+  // Without a pull rate, the cost can still be adjusted when there were no walls to discount.
+  const rate = input.pullRate?.rate ?? (walled.every((b) => wall(b, bandPct, "bid") === 0 && wall(b, bandPct, "ask") === 0) ? 0 : null);
+  const adjustedCosts =
+    rate === null
+      ? []
+      : walled.map((b) => Math.min(depth(b, bandPct, "bid")! - rate * wall(b, bandPct, "bid")!, depth(b, bandPct, "ask")! - rate * wall(b, bandPct, "ask")!));
 
   const streamed = bars.filter((b) => b.oracleChanges !== null);
   const gaps = streamed.map((b) => b.oracleMaxGapMs);
@@ -136,6 +168,8 @@ export function marketMetrics(input: MarketInput): MarketMetrics {
     liquidationBandPct: bandPct,
     liquidationMoveCostUsd: median(moveCosts),
     moveCostIsLowerBound: booked.length > 0 && shortReach > booked.length / 2,
+    adjustedMoveCostUsd: median(adjustedCosts),
+    pullRate: input.pullRate ?? null,
     oracleGapBps: p95(priced.map((b) => (b.midPx === null ? null : (Math.abs(b.midPx - b.oraclePx!) / b.oraclePx!) * 10_000))),
     oracleUnchangedP95Sec: measuredGaps.length ? p95(measuredGaps)! / 1000 : null,
     oracleUnchangedOver10sShare: measuredGaps.length ? measuredGaps.filter((g) => g > ORACLE_FALLBACK_MS).length / measuredGaps.length : null,

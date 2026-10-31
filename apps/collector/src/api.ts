@@ -3,9 +3,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { GRADES, type Grade } from "@telltale/detectors";
-import type { AlertList, AlertView, Board, BoardDex, BoardMarket, DexDetail, Health, HistoryPoint, MarketDetail, TrackRecord } from "./api-types.ts";
+import type { AlertList, AlertView, Board, BoardDex, BoardMarket, DexDetail, Health, HistoryPoint, HistoryRange, MarketDetail, MarketHistory, TrackRecord } from "./api-types.ts";
 import { badgeSvg, type BadgeState } from "./badge.ts";
-import { scoreDatabase, type ScoredMarket, type Scorecard } from "./scoring.ts";
+import { HISTORY_RANGES, isHistoryRange, marketHistory } from "./history.ts";
+import { METHODOLOGY_VERSION } from "./methodology.ts";
+import { loadPullRates, scoreDatabase, type ScoredMarket, type Scorecard } from "./scoring.ts";
 import { toAlert } from "./store.ts";
 import { summarizeTrack, type TrackRow } from "./track.ts";
 
@@ -25,6 +27,8 @@ export interface ApiOptions {
 
 const HISTORY_MS = 24 * 60 * 60_000;
 const BUCKET_MS = 5 * 60_000;
+/** Pull rates span 14 days, so an hourly recount is plenty; counting takes a few hundred ms. */
+const PULL_RATES_MS = 60 * 60_000;
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -75,6 +79,9 @@ export class Api {
   private card: Scorecard | null = null;
   private board: Board | null = null;
   private track: TrackRecord | null = null;
+  /** Histories computed since the last refresh, by coin and range. */
+  private histories = new Map<string, MarketHistory>();
+  private pullRates: { at: number; rates: ReturnType<typeof loadPullRates> } | null = null;
 
   constructor(options: ApiOptions) {
     this.options = { staleAfterSeconds: 180, alertsPublic: false, alertsSince: 0, now: Date.now, ...options, webRoot: options.webRoot ? resolve(options.webRoot) : null };
@@ -82,7 +89,13 @@ export class Api {
   }
 
   refresh(): void {
-    const card = scoreDatabase(this.db, { windowMinutes: this.options.windowMinutes, minCoverageMinutes: Math.min(20, this.options.windowMinutes) });
+    const now = this.options.now();
+    if (!this.pullRates || now - this.pullRates.at >= PULL_RATES_MS) this.pullRates = { at: now, rates: loadPullRates(this.db, now) };
+    const card = scoreDatabase(this.db, {
+      windowMinutes: this.options.windowMinutes,
+      minCoverageMinutes: Math.min(20, this.options.windowMinutes),
+      pullRates: this.pullRates.rates,
+    });
     const counts = Object.fromEntries(GRADES.map((g) => [g, 0])) as Record<Grade, number>;
     for (const m of card.markets) if (m.grade.grade) counts[m.grade.grade]++;
     const generatedAt = this.options.now();
@@ -90,6 +103,7 @@ export class Api {
     this.card = card;
     this.board = {
       generatedAt,
+      methodologyVersion: METHODOLOGY_VERSION,
       windowMinutes: card.windowMinutes,
       from: card.from,
       to: card.to,
@@ -99,6 +113,7 @@ export class Api {
       markets: card.markets.map(toRow),
     };
     this.track = this.trackRecord(generatedAt);
+    this.histories.clear();
   }
 
   close(): void {
@@ -136,6 +151,13 @@ export class Api {
     const badge = path.match(/^\/api\/badge\/(.+)\.svg$/);
     if (badge) return this.badge(badge[1]!, res);
 
+    const history = path.match(/^\/api\/markets\/(.+)\/history$/);
+    if (history) {
+      const range = query.get("range") ?? "24h";
+      if (!isHistoryRange(range)) return this.send(res, 400, { error: `range must be one of ${Object.keys(HISTORY_RANGES).join(", ")}.` });
+      const found = this.marketHistory(history[1]!, range);
+      return found ? this.send(res, 200, found) : this.send(res, 404, { error: `No live market named ${history[1]}.` });
+    }
     const market = path.match(/^\/api\/markets\/(.+)$/);
     if (market) {
       const detail = this.marketDetail(market[1]!);
@@ -147,6 +169,7 @@ export class Api {
       if (!found) return this.send(res, 404, { error: `No DEX named ${dex[1]}.` });
       const detail: DexDetail = {
         generatedAt: this.board.generatedAt,
+        methodologyVersion: METHODOLOGY_VERSION,
         windowMinutes: this.board.windowMinutes,
         dex: found,
         markets: this.board.markets.filter((m) => m.dex === found.dex),
@@ -261,6 +284,7 @@ export class Api {
       .all(coin, since) as unknown as HistoryPoint[];
     return {
       generatedAt: this.board!.generatedAt,
+      methodologyVersion: METHODOLOGY_VERSION,
       windowMinutes: this.card!.windowMinutes,
       from: this.card!.from,
       to: this.card!.to,
@@ -275,6 +299,27 @@ export class Api {
       history,
       alerts: this.options.alertsPublic ? this.alerts(["coin = ?"], [coin], 10) : [],
     };
+  }
+
+  /** Kept until the next refresh, since the scorecard and the newest minute only change then. */
+  private marketHistory(coin: string, range: HistoryRange): MarketHistory | null {
+    const m = this.card!.markets.find((x) => x.coin === coin);
+    if (!m) return null;
+    const key = `${range} ${coin}`;
+    let found = this.histories.get(key);
+    if (!found) {
+      found = marketHistory(this.db, {
+        coin,
+        maxLeverage: m.maxLeverage,
+        peers: m.metrics.peers,
+        pullRate: m.metrics.pullRate?.rate ?? null,
+        range,
+        to: this.card!.to,
+        generatedAt: this.board!.generatedAt,
+      });
+      this.histories.set(key, found);
+    }
+    return found;
   }
 
   /** `/api/badge/<coin>.svg`: the market's grade as an image, for other sites to embed. */

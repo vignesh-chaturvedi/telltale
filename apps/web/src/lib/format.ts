@@ -198,6 +198,12 @@ export function utcTime(ms: number | null | undefined, withDate = false): string
   return `${date}, ${time} UTC`;
 }
 
+/** A UTC day: "Oct 28". */
+export function utcDate(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || !Number.isFinite(ms)) return PLACEHOLDER;
+  return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
 /** A span of minutes as people say it: 13 → "13 min", 128 → "2 h 8 min", 120 → "2 h". */
 export function minutesSpan(n: number): string {
   if (n < 60) return `${n} min`;

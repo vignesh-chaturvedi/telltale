@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **History for every check.** `GET /api/markets/{coin}/history?range=24h|7d|30d` measures each graded check step by step, the way the grade measures it, with a usual range for each. Each metric card on a market page now charts its check over 24 hours, 7 days or 30 days, beside the 60-minute value the grade uses.
+- **Cancel-adjusted cost to liquidation** (experimental, not graded). The collector records how much depth sits in large walls each minute (schema v6), and each market's pull rate comes from 14 days of walls that ended. The cost card shows the adjusted cost beside the raw one.
+- **Pulled walls retuned.** A wall must stand 90 seconds before its pull is an alert, and pulled walls are never critical. Of 214 measured warnings, walls pulled sooner were followed by a top-10% hour no more often than their control hours.
+- **Methodology version 1**, with open questions, and `methodologyVersion` in the API.
+
 ## 0.1.0 · 2026-10-13
 
 The first release of Telltale, live at [telltale.markets](https://telltale.markets): A–E safety ratings for every market on Hyperliquid, with alerts.

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { Api } from "../src/api.ts";
-import type { AlertList, Board, DexDetail, Health, MarketDetail, TrackRecord, TrackRecordResponse } from "../src/api-types.ts";
+import { METHODOLOGY_VERSION } from "../src/methodology.ts";
+import type { AlertList, Board, DexDetail, Health, MarketDetail, MarketHistory, TrackRecord, TrackRecordResponse } from "../src/api-types.ts";
 import { Store } from "../src/store.ts";
 import { T, seededStore } from "./seed.ts";
 
@@ -78,6 +79,34 @@ test("a market's detail includes its metrics, reasons and 24h history", async ()
   assert.equal(body.history.length, buckets, "30 minutes grouped into 5-minute buckets");
   assert.equal(body.history[0]!.markPx, 100);
   assert.ok(Math.abs(body.history[0]!.oracleGapBps! - 5) < 1e-6);
+});
+
+test("a market's history comes in three ranges, 24 hours by default", async () => {
+  const coin = encodeURIComponent("xyz:AVGO");
+  const day = await get<MarketHistory>(`/api/markets/${coin}/history`);
+  assert.equal(day.status, 200);
+  assert.equal(day.headers.get("cache-control"), "public, max-age=30");
+  assert.equal(day.body.range, "24h");
+  assert.equal(day.body.points.length, 288);
+  assert.equal(day.body.liquidationBandPct, 5);
+  assert.deepEqual(day.body.peers, ["para:AVGO"]);
+  const week = await get<MarketHistory>(`/api/markets/${coin}/history?range=7d`);
+  assert.equal(week.body.stepMinutes, 60);
+  assert.equal(week.body.points.length, 168);
+  assert.equal(week.body.points.at(-1)!.moveCostUsd, 1e6);
+
+  const bad = await get<{ error: string }>(`/api/markets/${coin}/history?range=1y`);
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /range must be one of 24h, 7d, 30d/);
+  assert.equal((await get("/api/markets/NOPE/history")).status, 404);
+});
+
+test("graded responses name the methodology version, the one at the top of docs/methodology.md", async () => {
+  const doc = readFileSync(new URL("../../../docs/methodology.md", import.meta.url), "utf8");
+  assert.equal(doc.match(/^Version (\S+) · /m)?.[1], METHODOLOGY_VERSION);
+  for (const path of ["/api/board", "/api/markets/BTC", "/api/markets/BTC/history", "/api/dexes/core"]) {
+    assert.equal((await get<{ methodologyVersion: string }>(path)).body.methodologyVersion, METHODOLOGY_VERSION, path);
+  }
 });
 
 test("unknown markets and DEXs are 404s with a message", async () => {

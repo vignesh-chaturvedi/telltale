@@ -11,7 +11,7 @@
 // bucket and one wall may be several orders. Everything here is a pure function of the snapshots
 // and trades fed in, in time order.
 import type { Signal } from "./alerts.ts";
-import { summarizeBook, type Level } from "./book.ts";
+import { DEPTH_BANDS, summarizeBook, type BookSummary, type DepthBand, type Level } from "./book.ts";
 import { median } from "./stats.ts";
 import { duration, pct, price, usd } from "./text.ts";
 
@@ -42,7 +42,6 @@ export interface WallRules {
   minLifetimeMs: number;
   /** ...and is this large: in USD, as a share of its side within ±2%, and against the market's usual wall. */
   warning: { usd: number; shareOfDepth: number; vsTypical: number };
-  critical: { usd: number; shareOfDepth: number; vsTypical: number };
 }
 
 export const DEFAULT_WALL_RULES: WallRules = {
@@ -56,12 +55,15 @@ export const DEFAULT_WALL_RULES: WallRules = {
   goneShare: 0.2,
   moved: { withinMs: 15_000, pct: 1, share: 0.5 },
   typical: { windowMs: 2 * 60 * 60_000, minSamples: 10 },
-  minLifetimeMs: 30_000,
+  // Checked against the track record's 214 measured warnings (Oct 2–29, 2026): walls pulled within
+  // 90 s were followed by a top-10% hour 22% of the time, no more than their control hours (22%);
+  // walls that stood longer, 27% against 14%.
+  minLifetimeMs: 90_000,
   // Two thirds of the side means the wall is at least twice everything else resting within ±2%.
   // At 3× the usual wall the shadow run raised 27 alerts in 26 hours, mostly routine large walls;
-  // 5× kept the 7 that stood out (up to 37×).
+  // 5× kept the 7 that stood out (up to 37×). There's no critical level: walls of $2M+ and 80% of
+  // their side were followed by a top-10% hour no more often than smaller ones (25% against 26%).
   warning: { usd: 250_000, shareOfDepth: 2 / 3, vsTypical: 5 },
-  critical: { usd: 2_000_000, shareOfDepth: 0.8, vsTypical: 5 },
 };
 
 export type WallEnd = "pulled" | "moved" | "filled" | "expired";
@@ -244,6 +246,34 @@ export class WallTracker {
 }
 
 /**
+ * USD resting in walls within each band of mid, per side, for one snapshot: levels of at least
+ * `minUsd` that pass the test the tracker uses to start following a wall (`sizeVsTypical` times
+ * the side's median level, or `shareOfDepth` of its depth within ±2%).
+ */
+export function wallDepth(
+  bids: readonly Level[],
+  asks: readonly Level[],
+  book: BookSummary,
+  minUsd: number,
+  rules: WallRules = DEFAULT_WALL_RULES,
+): Record<Side, Record<DepthBand, number>> {
+  const out: Record<Side, Record<DepthBand, number>> = { bid: { 1: 0, 2: 0, 5: 0 }, ask: { 1: 0, 2: 0, 5: 0 } };
+  if (book.mid === null) return out;
+  for (const side of ["bid", "ask"] as const) {
+    const levels = side === "bid" ? bids : asks;
+    const typical = median(levels.map((l) => l.px * l.sz)) ?? 0;
+    const depth = side === "bid" ? book.bidDepth[2] : book.askDepth[2];
+    for (const l of levels) {
+      const value = l.px * l.sz;
+      if (value < minUsd || (value < rules.sizeVsTypical * typical && value < rules.shareOfDepth * depth)) continue;
+      const distance = (Math.abs(l.px - book.mid) / book.mid) * 100;
+      for (const band of DEPTH_BANDS) if (distance <= band) out[side][band] += value;
+    }
+  }
+  return out;
+}
+
+/**
  * The alert for a pulled wall, or `null`. Only exceptional walls qualify: large, most of their
  * side of the book, several times the market's usual wall, and standing long enough to matter.
  */
@@ -253,14 +283,13 @@ export function pulledWallSignal(e: WallEvent, dex: string, rules: WallRules = D
   if (lifetime < rules.minLifetimeMs) return null;
   const share = e.sideDepthUsd > 0 ? e.peakUsd / e.sideDepthUsd : 1;
   const times = e.peakUsd / e.typicalUsd;
-  const meets = (t: { usd: number; shareOfDepth: number; vsTypical: number }) => e.peakUsd >= t.usd && share >= t.shareOfDepth && times >= t.vsTypical;
-  const severity = meets(rules.critical) ? "critical" : meets(rules.warning) ? "warning" : null;
-  if (!severity) return null;
+  const w = rules.warning;
+  if (e.peakUsd < w.usd || share < w.shareOfDepth || times < w.vsTypical) return null;
   return {
     kind: "pulled-wall",
     coin: e.coin,
     dex,
-    severity,
+    severity: "warning",
     at: e.at,
     title: `A ${usd(e.peakUsd)} ${e.side} wall was pulled after ${duration(lifetime)}`,
     detail:

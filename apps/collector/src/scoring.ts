@@ -10,6 +10,7 @@ import {
   type GradeOptions,
   type MarketGrade,
   type MarketMetrics,
+  type PullRate,
 } from "@telltale/detectors";
 import { MINUTE } from "./bars.ts";
 
@@ -17,6 +18,8 @@ export interface ScoreOptions extends GradeOptions {
   windowMinutes: number;
   /** Grade the window ending at this minute; defaults to the latest minute stored. */
   to?: number;
+  /** Each market's pull rate (see loadPullRates), for the cancel-adjusted cost. */
+  pullRates?: ReadonlyMap<string, PullRate>;
 }
 
 export interface ScoredMarket {
@@ -45,7 +48,35 @@ export interface Scorecard {
 export const BAR_COLUMNS = `ts, oracle_px AS oraclePx, mark_px AS markPx, mid_px AS midPx, open_interest AS openInterest,
   day_ntl_vlm AS dayNtlVlm, spread_bps AS spreadBps, oracle_changes AS oracleChanges, oracle_max_gap_ms AS oracleMaxGapMs,
   bid_depth_1 AS bidDepth1, ask_depth_1 AS askDepth1, bid_depth_2 AS bidDepth2, ask_depth_2 AS askDepth2,
-  bid_depth_5 AS bidDepth5, ask_depth_5 AS askDepth5, min_depth_2 AS minDepth2, reach_pct AS reachPct`;
+  bid_depth_5 AS bidDepth5, ask_depth_5 AS askDepth5, min_depth_2 AS minDepth2, reach_pct AS reachPct,
+  bid_wall_1 AS bidWall1, ask_wall_1 AS askWall1, bid_wall_2 AS bidWall2, ask_wall_2 AS askWall2, bid_wall_5 AS bidWall5, ask_wall_5 AS askWall5`;
+
+/** A market needs this many ended walls before its pull rate is used. */
+export const MIN_PULL_SAMPLE = 20;
+/** Pull rates look back as far as book_events are kept. */
+export const PULL_WINDOW_MS = 14 * 86_400_000;
+
+/**
+ * Each market's pull rate over the last 14 days of book_events: the share of its large walls' USD
+ * that was pulled before the price reached them, out of all its walls that ended (filled, moved,
+ * expired or pulled). Markets with fewer than MIN_PULL_SAMPLE walls are left out.
+ */
+export function loadPullRates(db: DatabaseSync, to: number): Map<string, PullRate> {
+  try {
+    // NOT INDEXED: the table holds only 14 days anyway, and reading it straight through is about 3×
+    // faster than the planner's walk of the (coin, ts) index with a row lookup per wall.
+    const rows = db
+      .prepare(
+        `SELECT coin, count(*) AS walls, sum(peak_usd) AS usd, sum(CASE WHEN kind = 'pulled' THEN peak_usd ELSE 0 END) AS pulled
+         FROM book_events NOT INDEXED WHERE ts > ? GROUP BY coin HAVING count(*) >= ?`,
+      )
+      .all(to - PULL_WINDOW_MS, MIN_PULL_SAMPLE) as { coin: string; walls: number; usd: number; pulled: number }[];
+    return new Map(rows.filter((r) => r.usd > 0).map((r) => [r.coin, { rate: r.pulled / r.usd, walls: r.walls }]));
+  } catch {
+    // The collector creates book_events; until it has, there are no rates.
+    return new Map();
+  }
+}
 
 /** The ticker without its DEX prefix. HIP-3 markets with the same ticker are checked against each other. */
 export const tickerOf = (coin: string): string => coin.slice(coin.indexOf(":") + 1);
@@ -109,6 +140,7 @@ export function scoreDatabase(db: DatabaseSync, options: ScoreOptions): Scorecar
       bars: bars.get(m.coin) ?? [],
       candles: candles.get(m.coin) ?? [],
       peers,
+      pullRate: options.pullRates?.get(m.coin) ?? null,
     });
     return { coin: m.coin, dex: m.dex, maxLeverage: m.maxLeverage, metrics, grade: gradeMarket(metrics, grading) };
   });

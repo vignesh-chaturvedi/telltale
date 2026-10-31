@@ -11,7 +11,7 @@ export function bar(coin: string, i: number, over: Partial<MinuteBar> = {}): Min
     openInterest: 10_000, funding: 0, premium: 0, dayNtlVlm: 1e7, oracleChanges: 20, oracleMaxGapMs: 4_000,
     spreadBps: 1, bookSource: "stream", bookUpdates: 12, bestBid: 99.9, bestAsk: 100.1,
     bidDepth1: 2e5, askDepth1: 2e5, bidDepth2: 5e5, askDepth2: 5e5, bidDepth5: 1e6, askDepth5: 1e6,
-    minDepth2: 9e5, largestLevelUsd: 5e4, reachPct: 6, trades: 10, buyNtl: 1e4, sellNtl: 1e4, maxTradeNtl: 2e3,
+    minDepth2: 9e5, largestLevelUsd: 5e4, reachPct: 6, bidWall1: 0, askWall1: 0, bidWall2: 0, askWall2: 0, bidWall5: 0, askWall5: 0, trades: 10, buyNtl: 1e4, sellNtl: 1e4, maxTradeNtl: 2e3,
     ...over,
   };
 }

@@ -1,6 +1,6 @@
 # How Telltale grades markets and raises alerts
 
-Version 0 · September 2026
+Version 1 · October 31, 2026. What changed in each version is listed under [Changes](#changes), and the parts we're least sure of under [Open questions](#open-questions).
 
 Telltale grades every live Hyperliquid perpetual market from A to E. It covers the core markets, whose oracles Hyperliquid's validators run, and HIP-3 markets, whose oracles their deployers run. Each grade comes with the numbers behind it. This document explains what is measured, how the numbers turn into a grade, and what the grades can't tell you.
 
@@ -29,7 +29,7 @@ Grades use the last **60 minutes** unless stated otherwise. A market needs at le
 
 ## Graded metrics
 
-Each metric falls into a band from A to E. The bands below are version 0 and will be tuned as more data comes in; every change will be listed at the end of this document.
+Each metric falls into a band from A to E. The bands below haven't changed since version 0 and will be tuned as more data comes in; every change is listed under [Changes](#changes).
 
 ### Depth against open interest · weight 30%
 
@@ -102,6 +102,24 @@ A DEX's score is the average of its markets' scores, weighted by open interest, 
 - **Open-interest cap use.** At 90% or more of its cap, a market may refuse new positions.
 - **Impact spread, 24h volume and daily volatility.**
 
+## Cancel-adjusted cost (experimental)
+
+The cost to reach liquidation levels counts every order resting in the book, but large orders can be cancelled as the price comes toward them. This experimental number discounts them by how often they have been. It isn't graded.
+
+- **Walls.** Each minute, the collector records how much of each side's depth within 1%, 2% and 5% sits in large levels: $250K or more, and at least 5 times the side's median level or a quarter of its depth within ±2%. That's the test the wall tracker uses for pulled-wall alerts.
+- **Pull rate.** Every wall of $250K or more is stored when it ends, with how it ended: traded against, moved nearby, standing for over 10 minutes, or pulled before the price reached it. A market's pull rate is the share of its walls' USD that was pulled over the last 14 days. It needs at least 20 ended walls.
+- **Adjusted cost.** Each minute, depth outside walls counts in full and wall depth counts at one minus the pull rate. Then, as for the raw cost, it takes the cheaper side and the median over 60 minutes.
+
+Because both numbers are medians, a wall that stands for less than half the hour barely moves either of them; the adjustment matters where large walls stand most of the time. It assumes a wall is as likely to be pulled when the price heads toward it as on an ordinary day, which is probably optimistic in a fast move. The history charts apply today's pull rate to each minute's walls, which are recorded only from this version on.
+
+## History
+
+Every check is also charted over the last 24 hours, 7 days and 30 days, to show whether today's number is usual for the market. Each point is the check measured the way the grade measures it, over one step instead of the last 60 minutes: 5-minute steps for 24 hours, hourly steps for 7 days and 4-hour steps for 30 days. Depth, the cost to reach liquidation levels and spread are the step's medians, the oracle and peer gaps its 95th percentile, and price, open interest and funding its last minute. On the 7-day chart, each point is the number the grade would have used for that hour.
+
+The shading on each chart is where the check usually sits: the 10th to 90th percentile of the steps in view. Days with 50%+ moves are charted as each finished day's largest move from its open, over the last 30 days.
+
+Minute bars are kept for 14 days. Older steps are built from 15-minute bars, which keep each quarter hour's average depth and spread and its last minute's prices, so older depth on the 30-day chart is slightly smoother. The grade still uses only the last 60 minutes.
+
 ## Alerts
 
 Grades describe a market over the last hour. Alerts report conditions as they happen, each one tied to how Hyperliquid markets have failed before. Like grades, alerts describe what the data shows. A pulled wall or a frozen oracle can have ordinary causes, and an alert says nothing about anyone's intent.
@@ -114,7 +132,7 @@ Grades describe a market over the last hour. Alerts report conditions as they ha
 | Depth collapse | Depth within ±2% stays below a share of its median over the previous 30 minutes (skipping the 5 before) for 5 straight minutes, open interest holds at 90% or more, and the market has at least $500K of open interest and a $100K baseline | below 40%, leaving under 3% of open interest | below 25%, leaving under 2% | |
 | Open-interest surge | Open interest rises 25% or more, and by at least $250K, within 15 minutes, in a market with less than 5% of its open interest within ±2% | | any | |
 | Near open-interest cap | Open interest reaches 90% of its cap | any | | |
-| Pulled wall | A large level stands for 30 s to 10 minutes and is removed with under 10% filled, before the price reaches it, and no similar wall goes up within 1% of its price in the next 15 s | | ≥ $250K, ≥ ⅔ of its side within ±2% (twice everything else) and ≥ 5× the market's usual wall over the past 2 hours | ≥ $2M, ≥ 80% of its side and ≥ 5× the usual wall |
+| Pulled wall | A large level stands for 90 s to 10 minutes and is removed with under 10% filled, before the price reaches it, and no similar wall goes up within 1% of its price in the next 15 s | | ≥ $250K, ≥ ⅔ of its side within ±2% (twice everything else) and ≥ 5× the market's usual wall over the past 2 hours | |
 | Deployer change | A DEX changes a setting: listing or delisting a market, leverage, open-interest caps, margin mode, fees, funding settings, the deployer, the oracle updater, or permissions | other changes | delisting, leverage, deployer, oracle updater or oracle permissions | |
 
 **One alert per episode.** A condition that holds for several minutes is one alert, which closes after 3 checked minutes without it. After an alert starts, the same kind of alert for the same market stays quiet for 12 hours unless it gets more severe. An alert keeps the text of its most severe moment.
@@ -158,20 +176,36 @@ Both archives keep only the 20 best price levels on each side, about ±0.2% of t
 
 - **Grouped books.** Depth is counted in price buckets of 0.1–0.6% of the price, so a band's edge is accurate to about one bucket. Books show at most 20 levels per side.
 - **Oracle updates are seen only as price changes.** Telltale can't tell a re-sent unchanged price from a missed update without reading node data.
-- **The window is short.** A 60-minute window reacts quickly and can swing with market hours; longer windows are planned for the public board.
-- **Position concentration isn't measured yet.** How much of the open interest a few accounts hold needs data the public API doesn't provide. It's planned from daily account snapshots and, if available, Hydromancer's position data.
+- **The window is short.** A 60-minute window reacts quickly and can swing with market hours. The history charts show how far each check swings; grading on longer windows is planned.
+- **Position concentration isn't measured yet.** The public API shows any account's positions, but not who holds a market's open interest. That's planned by collecting trader addresses from the trade stream and looking up the largest accounts.
 - **Daily moves use trade prices,** not the oracle price that HIP-3's rule refers to.
 - **Peers are matched by exact ticker only.** Two listings of the same index under different names (such as an S&P 500 index and S&P 500 futures) aren't compared, because a futures basis would look like disagreement.
 
+## Open questions
+
+These are the parts of the method we're least sure of. If you trade or run these markets and see them differently, [open an issue](https://github.com/vignesh-chaturvedi/telltale/issues); changes to the rules are listed below.
+
+- **How to treat cancels.** The cost to reach liquidation levels counts resting orders as if they'll stay. The experimental cancel-adjusted cost discounts large walls by how often they've been pulled, but it uses an ordinary day's pull rate, and walls may be pulled more often exactly when the price heads for them. It leaves smaller orders alone, though market makers widen or pull their quotes in fast moves too. Is the pull rate the right discount, and should smaller levels be discounted as well?
+- **Grading on distributions.** Grades use the last 60 minutes. A market that's deep most of the day but thin for an hour each night grades well most of the day. Grading on each check's distribution over a week, such as its worst hours or how often it falls below a band, would catch that, but grades would react more slowly. Which matters more: the market now, or how bad it gets?
+- **Positions.** Who holds the open interest matters: a few large accounts near their liquidation prices make a cascade likelier than many small ones. The largest accounts' positions and liquidation prices can be looked up, but not everyone's. How much of the open interest has to be covered before concentration is worth grading?
+
 ## Changes
 
+### Version 1 · October 31, 2026
+
+Grades are unchanged.
+
+- Pulled walls retuned (October 31, 2026), from the track record's 214 measured pulled-wall warnings (October 2–29). Walls pulled within 90 seconds were followed by a top-10% hour 22% of the time, no more than their control hours (22%), while walls that stood longer were followed 27% of the time against 14%. A wall must now stand 90 seconds, not 30, which would have cut these warnings by about a quarter (from 7.8 to 5.7 a day) and kept 42 of the 55 followed by a top-10% hour. Pulled walls are no longer critical: walls of $2M or more and 80% of their side were followed no more often than smaller ones (25% against 26%).
+- Cancel-adjusted cost (October 31, 2026): an experimental, ungraded cost to reach liquidation levels that discounts large walls by how often the market's walls were pulled over 14 days. The collector now records each minute's wall depth (schema v6).
+- History (October 31, 2026): every check charted over 24 hours, 7 days and 30 days, each point measured the way the grade measures it, with the usual range shaded.
+- Open questions, and version numbers for this document. The API reports the version as `methodologyVersion`.
+
+### Version 0 · September 25 – October 9, 2026
+
 - Track record (October 9, 2026): every public warning is measured an hour after it starts, against the market's own week and the same hour on the 3 days before.
-
 - Replays (October 2, 2026): POPCAT and FARTCOIN replayed through the live detectors, with a depth check for the archives' partial order books.
-
 - Alerts go live (October 2, 2026) after a 24-hour shadow run. In its first minutes the pulled-wall rule flagged about 60,000 walls a day, two thirds of them quotes being moved; walls must now not reappear nearby and must be far larger than the market's usual walls. A pulled wall now needs 5× the usual wall, not 3×: at 3× it raised 27 alerts in 26 hours, mostly routine.
 - Alerts (September 30, 2026): eight alert types, calibrated by replaying 21 hours of data. Depth collapse was split into information and warning levels, because a single level raised about 10 warnings a day, mostly from ordinary quote refreshes.
-
-- v0 (September 2026): first version, calibrated on three hours of data from all 328 live markets.
+- Grades (September 25, 2026): first version, calibrated on three hours of data from all 328 live markets.
   - Oracle-gap bands were widened from A ≤ 10 bps to A ≤ 20 bps, because major core markets showed ordinary perp basis of 10–20 bps.
   - Liquidation-cost bands were lowered from A ≥ $5M (C ≥ $250K) to A ≥ $2.5M (C ≥ $100K). The earlier bands put the typical core market, which needs about $140K to move to its liquidation level, at D.

@@ -15,12 +15,11 @@ import {
 } from "@telltale/detectors";
 import type { L2Book, Trade } from "@telltale/hl";
 import { AlertEngine, DEFAULT_ENGINE_OPTIONS, type AlertSink } from "./alerts.ts";
+import { LARGE_WALL_USD } from "./bars.ts";
 import { deployerChangeSignal, diffDexConfig } from "./config-diff.ts";
 import { tickerOf } from "./scoring.ts";
 import type { AlertStore, ConfigUpdate } from "./store.ts";
 
-/** Walls smaller than this aren't stored: from $100K up they came to about 14 MB a day in the shadow run. */
-export const BOOK_EVENT_MIN_USD = 250_000;
 
 export interface WatchedMarket {
   coin: string;
@@ -101,7 +100,7 @@ export class Watch {
     if (!m || !book.levels) return;
     for (const e of this.walls.onBook(book.coin, toLevels(book.levels[0]), toLevels(book.levels[1]), at)) {
       // Large levels come and go constantly; keep how the bigger walls ended, as evidence.
-      if (e.kind !== "appeared" && e.peakUsd >= BOOK_EVENT_MIN_USD) this.bookEvents.push(e);
+      if (e.kind !== "appeared" && e.peakUsd >= LARGE_WALL_USD) this.bookEvents.push(e);
       const s = pulledWallSignal(e, m.dex);
       if (s) this.engine.onEvent(s);
     }

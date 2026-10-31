@@ -1,4 +1,4 @@
-import { summarizeBook, toLevels } from "@telltale/detectors";
+import { summarizeBook, toLevels, wallDepth } from "@telltale/detectors";
 import type { L2Book, PerpAssetCtx, Trade } from "@telltale/hl";
 
 /**
@@ -9,6 +9,13 @@ export type Source = "stream" | "all" | "rest";
 const RANK: Record<Source, number> = { rest: 1, all: 2, stream: 3 };
 
 export const MINUTE = 60_000;
+
+/**
+ * Walls from this size up are counted in each minute's wall depth and stored when they end
+ * (book_events), so the pull rate measured on the stored walls applies to the counted ones.
+ * From $100K up, stored walls came to about 14 MB a day in the shadow run.
+ */
+export const LARGE_WALL_USD = 250_000;
 export const minuteOf = (t: number): number => t - (t % MINUTE);
 
 /**
@@ -53,6 +60,13 @@ export interface MinuteBar {
   minDepth2: number | null;
   largestLevelUsd: number | null;
   reachPct: number | null;
+  /** USD in walls of `LARGE_WALL_USD` or more within each band, from the same snapshot as the depth. */
+  bidWall1: number | null;
+  askWall1: number | null;
+  bidWall2: number | null;
+  askWall2: number | null;
+  bidWall5: number | null;
+  askWall5: number | null;
   trades: number;
   buyNtl: number;
   sellNtl: number;
@@ -88,6 +102,12 @@ function emptyBar(coin: string, ts: number): MinuteBar {
     minDepth2: null,
     largestLevelUsd: null,
     reachPct: null,
+    bidWall1: null,
+    askWall1: null,
+    bidWall2: null,
+    askWall2: null,
+    bidWall5: null,
+    askWall5: null,
     trades: 0,
     buyNtl: 0,
     sellNtl: 0,
@@ -158,7 +178,9 @@ export class MinuteAggregator {
 
   onBook(book: L2Book, at: number, source: Source): void {
     const bar = this.bar(book.coin, at);
-    const s = summarizeBook(toLevels(book.levels[0]), toLevels(book.levels[1]));
+    const bids = toLevels(book.levels[0]);
+    const asks = toLevels(book.levels[1]);
+    const s = summarizeBook(bids, asks);
     bar.bookUpdates++;
     const combined2 = s.bidDepth[2] + s.askDepth[2];
     if (s.mid !== null) bar.minDepth2 = Math.min(bar.minDepth2 ?? Infinity, combined2);
@@ -174,6 +196,13 @@ export class MinuteAggregator {
     bar.askDepth5 = s.askDepth[5];
     bar.largestLevelUsd = s.largestLevelUsd;
     bar.reachPct = s.reachPct;
+    const walls = wallDepth(bids, asks, s, LARGE_WALL_USD);
+    bar.bidWall1 = walls.bid[1];
+    bar.askWall1 = walls.ask[1];
+    bar.bidWall2 = walls.bid[2];
+    bar.askWall2 = walls.ask[2];
+    bar.bidWall5 = walls.bid[5];
+    bar.askWall5 = walls.ask[5];
   }
 
   onTrades(trades: readonly Trade[], at: number): void {
