@@ -26,6 +26,11 @@ sleep 3
 sudo systemctl restart telltale-web
 sudo systemctl reload caddy
 echo "Deployed $before → $after"
-sleep 5
-curl -fsS localhost:8740/api/health && echo
+# The API listens once its first scorecard is built, which takes 10–20 s after a restart.
+for _ in $(seq 30); do
+  if curl -fsS localhost:8740/api/health; then echo; exit 0; fi
+  sleep 2
+done
+echo "The API didn't answer within 60 s" >&2
+exit 1
 REMOTE
